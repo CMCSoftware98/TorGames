@@ -1,0 +1,267 @@
+syntax = "proto3";
+
+option csharp_namespace = "TorGames.Common.Protos";
+
+package torservice;
+
+// Main bidirectional streaming service
+service TorService {
+  // Persistent bidirectional connection for real-time communication
+  rpc Connect(stream ClientMessage) returns (stream ServerMessage);
+
+  // File transfer operations
+  rpc UploadFile(stream FileChunk) returns (FileResponse);
+  rpc DownloadFile(FileRequest) returns (stream FileChunk);
+}
+
+// ============== Client -> Server Messages ==============
+
+message ClientMessage {
+  string client_id = 1;
+  string client_type = 2;  // "INSTALLER" or "CLIENT"
+  int64 timestamp = 3;
+
+  oneof payload {
+    Registration registration = 10;
+    Heartbeat heartbeat = 11;
+    CommandResult command_result = 12;
+    SystemMetrics metrics = 13;
+    DetailedSystemInfo detailed_system_info = 14;
+  }
+}
+
+message Registration {
+  string machine_name = 1;
+  string os_version = 2;
+  string os_architecture = 3;
+  int32 cpu_count = 4;
+  int64 total_memory_bytes = 5;
+  string username = 6;
+  string client_version = 7;
+  string ip_address = 8;
+  string mac_address = 9;
+}
+
+message Heartbeat {
+  int64 uptime_seconds = 1;
+  double cpu_usage_percent = 2;
+  int64 available_memory_bytes = 3;
+}
+
+message CommandResult {
+  string command_id = 1;
+  bool success = 2;
+  int32 exit_code = 3;
+  string stdout = 4;
+  string stderr = 5;
+  bytes data = 6;
+  string error_message = 7;
+}
+
+message SystemMetrics {
+  double cpu_usage_percent = 1;
+  int64 available_memory_bytes = 2;
+  int64 disk_free_bytes = 3;
+  repeated ProcessInfo running_processes = 4;
+}
+
+message ProcessInfo {
+  int32 pid = 1;
+  string name = 2;
+  double cpu_percent = 3;
+  int64 memory_bytes = 4;
+}
+
+// Detailed system information for Client Manager view
+message DetailedSystemInfo {
+  // Request ID for correlating responses
+  string request_id = 9;
+
+  // CPU Information
+  CpuInfo cpu = 1;
+
+  // Memory Information
+  MemoryInfo memory = 2;
+
+  // Disk Information
+  repeated DiskInfo disks = 3;
+
+  // Network Information
+  repeated NetworkAdapterInfo network_adapters = 4;
+
+  // GPU Information
+  repeated GpuInfo gpus = 5;
+
+  // Operating System Information
+  OsInfo os = 6;
+
+  // System Information
+  SystemHardwareInfo hardware = 7;
+
+  // Current Performance
+  PerformanceInfo performance = 8;
+}
+
+message CpuInfo {
+  string name = 1;
+  string manufacturer = 2;
+  int32 cores = 3;
+  int32 logical_processors = 4;
+  int32 max_clock_speed_mhz = 5;
+  int32 current_clock_speed_mhz = 6;
+  string architecture = 7;
+  int32 l2_cache_kb = 8;
+  int32 l3_cache_kb = 9;
+}
+
+message MemoryInfo {
+  int64 total_physical_bytes = 1;
+  int64 available_physical_bytes = 2;
+  int64 total_virtual_bytes = 3;
+  int64 available_virtual_bytes = 4;
+  int32 memory_load_percent = 5;
+  int32 slot_count = 6;
+  int32 speed_mhz = 7;
+  string memory_type = 8;
+}
+
+message DiskInfo {
+  string name = 1;
+  string drive_letter = 2;
+  string volume_label = 3;
+  string file_system = 4;
+  int64 total_bytes = 5;
+  int64 free_bytes = 6;
+  string drive_type = 7;  // Fixed, Removable, Network, CDRom, etc.
+  bool is_system_drive = 8;
+}
+
+message NetworkAdapterInfo {
+  string name = 1;
+  string description = 2;
+  string mac_address = 3;
+  string ip_address = 4;
+  string subnet_mask = 5;
+  string default_gateway = 6;
+  string dns_servers = 7;
+  int64 speed_bps = 8;
+  string status = 9;
+  string adapter_type = 10;  // Ethernet, WiFi, etc.
+  bool is_dhcp_enabled = 11;
+}
+
+message GpuInfo {
+  string name = 1;
+  string manufacturer = 2;
+  int64 video_memory_bytes = 3;
+  string driver_version = 4;
+  int32 current_refresh_rate = 5;
+  string video_processor = 6;
+  string resolution = 7;
+}
+
+message OsInfo {
+  string name = 1;
+  string version = 2;
+  string build_number = 3;
+  string architecture = 4;
+  string install_date = 5;
+  string last_boot_time = 6;
+  string serial_number = 7;
+  string registered_user = 8;
+  string system_directory = 9;
+  int32 timezone_offset_minutes = 10;
+  string timezone_name = 11;
+}
+
+message SystemHardwareInfo {
+  string manufacturer = 1;
+  string model = 2;
+  string system_type = 3;
+  string bios_version = 4;
+  string bios_manufacturer = 5;
+  string bios_release_date = 6;
+  string motherboard_manufacturer = 7;
+  string motherboard_product = 8;
+  string motherboard_serial = 9;
+  string uuid = 10;
+}
+
+message PerformanceInfo {
+  double cpu_usage_percent = 1;
+  int64 available_memory_bytes = 2;
+  int64 uptime_seconds = 3;
+  int32 process_count = 4;
+  int32 thread_count = 5;
+  int32 handle_count = 6;
+  repeated ProcessInfo top_processes = 7;  // Top 10 by CPU/memory
+}
+
+// ============== Server -> Client Messages ==============
+
+message ServerMessage {
+  string message_id = 1;
+  int64 timestamp = 2;
+
+  oneof payload {
+    Command command = 10;
+    FileTransferRequest file_transfer = 11;
+    ConfigUpdate config_update = 12;
+    Ping ping = 13;
+    ConnectionResponse connection_response = 14;
+  }
+}
+
+message Command {
+  string command_id = 1;
+  string command_type = 2;  // Extensible: "shell", "powershell", "download", "upload", "metrics", "update", "restart", "shutdown", etc.
+  string command_text = 3;
+  bytes payload = 4;
+  map<string, string> parameters = 5;
+  int32 timeout_seconds = 6;
+}
+
+message FileTransferRequest {
+  string transfer_id = 1;
+  string file_path = 2;
+  bool is_upload = 3;  // true = server sending to client, false = client sending to server
+  int64 file_size = 4;
+}
+
+message ConfigUpdate {
+  map<string, string> settings = 1;
+}
+
+message Ping {
+  int64 server_timestamp = 1;
+}
+
+message ConnectionResponse {
+  bool accepted = 1;
+  string rejection_reason = 2;
+  string assigned_id = 3;
+}
+
+// ============== File Transfer Messages ==============
+
+message FileChunk {
+  string transfer_id = 1;
+  string file_name = 2;
+  int64 total_size = 3;
+  int64 offset = 4;
+  bytes data = 5;
+  bool is_last = 6;
+  string checksum = 7;
+}
+
+message FileRequest {
+  string transfer_id = 1;
+  string file_path = 2;
+}
+
+message FileResponse {
+  string transfer_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  int64 bytes_received = 4;
+}

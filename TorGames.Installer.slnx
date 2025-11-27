@@ -1,0 +1,7 @@
+
+<Solution>
+  <Project Path="TorGames.Client/TorGames.Client.csproj" />
+  <Project Path="TorGames.Common/TorGames.Common.csproj" />
+  <Project Path="TorGames.Installer/TorGames.Installer.csproj" />
+  <Project Path="TorGames.Server/TorGames.Server.csproj" />
+</Solution>
