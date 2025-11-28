@@ -305,20 +305,20 @@ public class TcpInstallerService : BackgroundService
     {
         try
         {
-            // Get the latest client version info
-            var latestVersion = _updateService.GetLatestVersion();
-            if (latestVersion == null)
+            // Check if there's a version available
+            var latestVersionInfo = _updateService.GetLatestVersion();
+            if (latestVersionInfo == null)
             {
                 _logger.LogWarning("No client update available to send to installer {Key}",
                     connection.Client.ConnectionKey);
                 return;
             }
 
-            // Build download URL
-            var downloadUrl = $"{_serverBaseUrl}/api/updates/download/{latestVersion}";
+            // Build download URL - use /latest endpoint so installer doesn't need version number
+            var downloadUrl = $"{_serverBaseUrl}/api/update/download/latest";
 
-            _logger.LogInformation("Sending auto-install command to {Key}: {Url}",
-                connection.Client.ConnectionKey, downloadUrl);
+            _logger.LogInformation("Sending auto-install command to {Key}: {Url} (version: {Version})",
+                connection.Client.ConnectionKey, downloadUrl, latestVersionInfo.Version);
 
             var message = new TcpMessage
             {

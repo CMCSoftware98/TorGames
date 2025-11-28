@@ -67,6 +67,26 @@ public class UpdateController : ControllerBase
     }
 
     /// <summary>
+    /// Downloads the latest version of the client.
+    /// </summary>
+    [HttpGet("download/latest")]
+    [AllowAnonymous]
+    public IActionResult DownloadLatestVersion()
+    {
+        var latest = _updateService.GetLatestVersion();
+        if (latest == null)
+            return NotFound("No versions available");
+
+        var filePath = _updateService.GetVersionFilePath(latest.Version);
+        if (filePath == null)
+            return NotFound($"Version file not found for {latest.Version}");
+
+        _logger.LogInformation("Serving latest client version: {Version}", latest.Version);
+        var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+        return File(stream, "application/octet-stream", "TorGames.Client.exe");
+    }
+
+    /// <summary>
     /// Downloads a specific version of the client.
     /// </summary>
     [HttpGet("download/{version}")]

@@ -39,6 +39,91 @@ public class UpdateService
         {
             SaveManifest(new VersionManifest());
         }
+
+        // Scan for existing version folders and populate manifest
+        ScanAndPopulateVersions();
+    }
+
+    /// <summary>
+    /// Scans the updates folder for version directories and populates the manifest.
+    /// This helps when files are manually added to the server.
+    /// </summary>
+    public void ScanAndPopulateVersions()
+    {
+        try
+        {
+            var manifest = LoadManifest();
+            var existingVersions = new HashSet<string>(manifest.Versions.Select(v => v.Version));
+            var foundNewVersions = false;
+
+            // Scan for version directories (format: YYYY.MM.DD.BUILD)
+            var versionPattern = new System.Text.RegularExpressions.Regex(@"^20\d{2}\.\d{1,2}\.\d{1,2}\.\d+$");
+
+            foreach (var dir in Directory.GetDirectories(_updatesPath))
+            {
+                var dirName = Path.GetFileName(dir);
+                if (!versionPattern.IsMatch(dirName))
+                    continue;
+
+                if (existingVersions.Contains(dirName))
+                    continue;
+
+                // Check if TorGames.Client.exe exists in this folder
+                var clientExePath = Path.Combine(dir, "TorGames.Client.exe");
+                if (!File.Exists(clientExePath))
+                {
+                    _logger.LogDebug("Version folder {Version} has no TorGames.Client.exe, skipping", dirName);
+                    continue;
+                }
+
+                // Calculate hash and get file info
+                var fileInfo = new FileInfo(clientExePath);
+                var hash = CalculateSha256Sync(clientExePath);
+
+                var versionInfo = new VersionInfo
+                {
+                    Version = dirName,
+                    Sha256 = hash,
+                    FileSize = fileInfo.Length,
+                    UploadedAt = fileInfo.CreationTimeUtc,
+                    ReleaseNotes = "Auto-discovered from updates folder",
+                    UploadedBy = "System"
+                };
+
+                manifest.Versions.Add(versionInfo);
+                foundNewVersions = true;
+                _logger.LogInformation("Discovered version {Version} (size: {Size} bytes)", dirName, fileInfo.Length);
+            }
+
+            if (foundNewVersions)
+            {
+                // Update latest version to the highest version found
+                var latestVersion = manifest.Versions
+                    .OrderByDescending(v => v.Version, new VersionComparer())
+                    .FirstOrDefault();
+
+                if (latestVersion != null)
+                {
+                    manifest.LatestVersion = latestVersion.Version;
+                }
+
+                SaveManifest(manifest);
+                _logger.LogInformation("Updated manifest with {Count} versions, latest: {Latest}",
+                    manifest.Versions.Count, manifest.LatestVersion);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to scan for versions");
+        }
+    }
+
+    private static string CalculateSha256Sync(string filePath)
+    {
+        using var sha256 = SHA256.Create();
+        using var stream = File.OpenRead(filePath);
+        var hash = sha256.ComputeHash(stream);
+        return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
     }
 
     /// <summary>
