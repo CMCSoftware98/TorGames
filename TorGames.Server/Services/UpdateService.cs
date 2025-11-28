@@ -242,18 +242,27 @@ public class UpdateService
     /// <summary>
     /// Extracts version from a .NET assembly file using PE metadata.
     /// Works cross-platform (Linux/Windows).
+    /// For single-file apps, falls back to pattern matching in the binary.
     /// </summary>
     public string? ExtractVersionFromFile(string filePath)
     {
+        // First, try pattern matching which works for single-file apps
+        // This is the most reliable method for published single-file executables
+        var patternVersion = ExtractVersionFromSingleFileApp(filePath);
+        if (!string.IsNullOrEmpty(patternVersion))
+        {
+            return patternVersion;
+        }
+
+        // Fallback: Try reading PE metadata directly (works for non-single-file apps)
         try
         {
-            // Try reading PE metadata (works cross-platform)
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             using var peReader = new PEReader(fs);
 
             if (!peReader.HasMetadata)
             {
-                _logger.LogWarning("File has no .NET metadata: {FilePath}", filePath);
+                _logger.LogWarning("File has no .NET metadata and no version pattern found: {FilePath}", filePath);
                 return null;
             }
 
@@ -285,7 +294,7 @@ public class UpdateService
                                 {
                                     version = version.Substring(0, plusIndex);
                                 }
-                                _logger.LogInformation("Extracted InformationalVersion: {Version}", version);
+                                _logger.LogInformation("Extracted InformationalVersion from PE: {Version}", version);
                                 return version;
                             }
                         }
@@ -297,18 +306,12 @@ public class UpdateService
             var assemblyDef = metadataReader.GetAssemblyDefinition();
             var assemblyVersion = assemblyDef.Version;
             var versionString = $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}.{assemblyVersion.Revision}";
-            _logger.LogInformation("Extracted AssemblyVersion: {Version}", versionString);
+            _logger.LogInformation("Extracted AssemblyVersion from PE: {Version}", versionString);
             return versionString;
-        }
-        catch (BadImageFormatException ex)
-        {
-            // This might be a single-file bundled app - try alternative approach
-            _logger.LogWarning(ex, "Could not read PE metadata (possibly single-file app): {FilePath}", filePath);
-            return ExtractVersionFromSingleFileApp(filePath);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to extract version from file: {FilePath}", filePath);
+            _logger.LogWarning(ex, "Could not read PE metadata: {FilePath}", filePath);
             return null;
         }
     }
