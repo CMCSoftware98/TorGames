@@ -13,6 +13,7 @@ export interface ClientDto {
   ipAddress: string
   macAddress: string
   isAdmin: boolean
+  countryCode: string
   connectedAt: string
   lastHeartbeat: string
   isOnline: boolean

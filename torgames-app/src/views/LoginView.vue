@@ -68,7 +68,6 @@ function startLockoutTimer() {
 }
 
 onMounted(() => {
-  // Check if already locked out on mount
   if (authStore.isLockedOut) {
     startLockoutTimer()
   }
@@ -83,20 +82,23 @@ onUnmounted(() => {
 
 <template>
   <v-app>
-    <v-main class="d-flex align-center justify-center" style="min-height: 100vh;">
-      <v-card
-        class="pa-8"
-        width="400"
-        elevation="8"
-      >
-        <v-card-title class="text-center text-h4 mb-4">
-          <v-icon size="48" color="primary" class="mr-2">mdi-shield-lock</v-icon>
-          TorGames
-        </v-card-title>
+    <v-main class="d-flex align-center justify-center login-background">
+      <!-- Decorative Elements -->
+      <div class="glow-orb orb-1"></div>
+      <div class="glow-orb orb-2"></div>
 
-        <v-card-subtitle class="text-center mb-6">
-          Enter your master password to continue
-        </v-card-subtitle>
+      <v-card
+        class="glass-panel pa-8 rounded-xl"
+        width="420"
+        elevation="0"
+      >
+        <div class="text-center mb-8">
+          <v-avatar color="primary" size="64" class="mb-4 elevation-6">
+            <v-icon size="32" color="white">mdi-shield-lock</v-icon>
+          </v-avatar>
+          <h1 class="text-h4 font-weight-bold text-white mb-2">TorGames</h1>
+          <div class="text-subtitle-1 text-medium-emphasis">Secure Control Panel</div>
+        </div>
 
         <v-form @submit.prevent="handleSubmit">
           <v-text-field
@@ -106,31 +108,45 @@ onUnmounted(() => {
             @click:append-inner="showPassword = !showPassword"
             label="Master Password"
             variant="outlined"
+            bg-color="rgba(255,255,255,0.05)"
             :disabled="isFormDisabled"
             :error="!!errorMessage"
             autofocus
-            class="mb-4"
-          />
-
-          <v-alert
-            v-if="errorMessage"
-            type="error"
-            variant="tonal"
-            density="compact"
-            class="mb-4"
+            class="mb-2"
+            rounded="lg"
           >
-            {{ errorMessage }}
-          </v-alert>
+            <template #prepend-inner>
+              <v-icon color="primary" class="mr-2">mdi-key</v-icon>
+            </template>
+          </v-text-field>
 
-          <v-alert
-            v-if="!authStore.isLockedOut && authStore.loginAttempts > 0"
-            type="warning"
-            variant="tonal"
-            density="compact"
-            class="mb-4"
-          >
-            {{ authStore.attemptsRemaining }} attempts remaining
-          </v-alert>
+          <v-expand-transition>
+            <div v-if="errorMessage">
+              <v-alert
+                type="error"
+                variant="tonal"
+                density="compact"
+                class="mb-4 rounded-lg"
+                icon="mdi-alert-circle"
+              >
+                {{ errorMessage }}
+              </v-alert>
+            </div>
+          </v-expand-transition>
+
+          <v-expand-transition>
+            <div v-if="!authStore.isLockedOut && authStore.loginAttempts > 0">
+              <v-alert
+                type="warning"
+                variant="tonal"
+                density="compact"
+                class="mb-4 rounded-lg"
+                icon="mdi-shield-alert"
+              >
+                {{ authStore.attemptsRemaining }} attempts remaining
+              </v-alert>
+            </div>
+          </v-expand-transition>
 
           <v-btn
             type="submit"
@@ -139,11 +155,66 @@ onUnmounted(() => {
             block
             :loading="isLoading"
             :disabled="isFormDisabled || !password"
+            class="mt-4 rounded-lg font-weight-bold"
+            elevation="4"
+            height="48"
           >
             {{ buttonText }}
           </v-btn>
         </v-form>
+
+        <div class="text-center mt-6 text-caption text-disabled">
+          Protected by TorGames Security System
+        </div>
       </v-card>
     </v-main>
   </v-app>
 </template>
+
+<style scoped>
+.login-background {
+  background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+  position: relative;
+  overflow: hidden;
+}
+
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  z-index: 0;
+}
+
+.orb-1 {
+  width: 300px;
+  height: 300px;
+  background: #6366f1;
+  top: 10%;
+  left: 20%;
+  animation: float 10s infinite ease-in-out;
+}
+
+.orb-2 {
+  width: 250px;
+  height: 250px;
+  background: #ec4899;
+  bottom: 15%;
+  right: 20%;
+  animation: float 12s infinite ease-in-out reverse;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(30px, -30px); }
+  100% { transform: translate(0, 0); }
+}
+
+.v-text-field :deep(.v-field__outline__start) {
+  border-radius: 8px 0 0 8px !important;
+}
+
+.v-text-field :deep(.v-field__outline__end) {
+  border-radius: 0 8px 8px 0 !important;
+}
+</style>

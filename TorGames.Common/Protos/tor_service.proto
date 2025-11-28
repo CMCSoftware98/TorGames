@@ -41,6 +41,7 @@ message Registration {
   string ip_address = 8;
   string mac_address = 9;
   bool is_admin = 10;
+  string country_code = 11;  // ISO 3166-1 alpha-2 country code from Windows locale
 }
 
 message Heartbeat {

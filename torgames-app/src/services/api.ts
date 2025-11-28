@@ -150,3 +150,71 @@ export async function deleteVersion(
 export function getVersionDownloadUrl(version: string): string {
   return `${API_BASE_URL}/update/download/${version}`
 }
+
+// Server stats API
+export interface ServerStats {
+  cpuUsagePercent: number
+  memoryUsedBytes: number
+  memoryTotalBytes: number
+  diskUsedBytes: number
+  diskTotalBytes: number
+  connectedClients: number
+  totalClients: number
+  uptimeSeconds: number
+  timestamp: string
+}
+
+export async function getServerStats(token: string): Promise<ServerStats | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/serverstats`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to get server stats:', response.status)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Get server stats failed:', error)
+    return null
+  }
+}
+
+// IP Geolocation API
+export interface GeoLocation {
+  country: string
+  countryCode: string
+  city: string
+  region: string
+}
+
+export async function getIpGeolocation(ip: string): Promise<GeoLocation | null> {
+  try {
+    // Use ip-api.com (free, no API key needed, 45 req/min limit)
+    const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,regionName,city`)
+
+    if (!response.ok) {
+      return null
+    }
+
+    const data = await response.json()
+
+    if (data.status !== 'success') {
+      return null
+    }
+
+    return {
+      country: data.country,
+      countryCode: data.countryCode,
+      city: data.city,
+      region: data.regionName
+    }
+  } catch (error) {
+    console.error('Geolocation lookup failed:', error)
+    return null
+  }
+}

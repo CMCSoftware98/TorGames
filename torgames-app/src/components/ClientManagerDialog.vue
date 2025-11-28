@@ -1,359 +1,418 @@
 <template>
-  <v-dialog v-model="dialog" max-width="900" scrollable>
-    <v-card>
-      <v-card-title class="d-flex align-center">
-        <v-icon class="mr-2">mdi-monitor</v-icon>
-        Client Manager - {{ client?.machineName }}
+  <v-dialog v-model="dialog" max-width="900" scrollable transition="dialog-bottom-transition">
+    <v-card class="glass-panel rounded-xl border-none">
+      <!-- Header -->
+      <v-card-title class="d-flex align-center px-6 py-4 border-b border-opacity-10">
+        <v-avatar color="primary" size="32" class="mr-3">
+          <v-icon size="18" color="white">mdi-monitor</v-icon>
+        </v-avatar>
+        <span class="text-h6 font-weight-bold">Client Manager</span>
+        <v-chip class="ml-3 font-weight-medium" size="small" variant="tonal" color="primary">
+          {{ client?.machineName }}
+        </v-chip>
         <v-spacer />
-        <v-btn icon="mdi-refresh" variant="text" :loading="loading" @click="refresh" />
+        <v-btn icon="mdi-refresh" variant="text" :loading="loading" @click="refresh" class="mr-2" />
         <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
       </v-card-title>
 
-      <v-card-text v-if="loading && !systemInfo" class="text-center py-8">
-        <v-progress-circular indeterminate color="primary" size="64" />
-        <div class="mt-4">Fetching system information...</div>
+      <!-- Loading State -->
+      <v-card-text v-if="loading && !systemInfo" class="text-center py-12">
+        <v-progress-circular indeterminate color="primary" size="64" width="6" />
+        <div class="mt-6 text-h6 font-weight-light text-medium-emphasis">Fetching system information...</div>
       </v-card-text>
 
-      <v-card-text v-else-if="error" class="text-center py-8">
-        <v-icon color="error" size="64">mdi-alert-circle</v-icon>
-        <div class="mt-4 text-error">{{ error }}</div>
-        <v-btn color="primary" class="mt-4" @click="refresh">Retry</v-btn>
+      <!-- Error State -->
+      <v-card-text v-else-if="error" class="text-center py-12">
+        <v-icon color="error" size="64" class="mb-4">mdi-alert-circle</v-icon>
+        <div class="text-h6 text-error mb-2">Connection Failed</div>
+        <div class="text-body-1 text-medium-emphasis mb-6">{{ error }}</div>
+        <v-btn color="primary" prepend-icon="mdi-refresh" @click="refresh" class="px-6">Retry Connection</v-btn>
       </v-card-text>
 
-      <v-card-text v-else-if="systemInfo" class="pa-0">
-        <v-tabs v-model="tab" bg-color="grey-darken-4">
-          <v-tab value="overview">Overview</v-tab>
-          <v-tab value="cpu">CPU</v-tab>
-          <v-tab value="memory">Memory</v-tab>
-          <v-tab value="storage">Storage</v-tab>
-          <v-tab value="network">Network</v-tab>
-          <v-tab value="gpu">GPU</v-tab>
-          <v-tab value="processes">Processes</v-tab>
-        </v-tabs>
+      <!-- Content -->
+      <v-card-text v-else-if="systemInfo" class="pa-0 d-flex flex-column fill-height">
+        <div class="d-flex fill-height">
+          <!-- Vertical Tabs -->
+          <v-tabs
+            v-model="tab"
+            direction="vertical"
+            color="primary"
+            class="border-r border-opacity-10 py-4"
+            style="min-width: 160px;"
+          >
+            <v-tab value="overview" prepend-icon="mdi-view-dashboard-outline" class="justify-start px-6">Overview</v-tab>
+            <v-tab value="cpu" prepend-icon="mdi-chip" class="justify-start px-6">CPU</v-tab>
+            <v-tab value="memory" prepend-icon="mdi-memory" class="justify-start px-6">Memory</v-tab>
+            <v-tab value="storage" prepend-icon="mdi-harddisk" class="justify-start px-6">Storage</v-tab>
+            <v-tab value="network" prepend-icon="mdi-lan" class="justify-start px-6">Network</v-tab>
+            <v-tab value="gpu" prepend-icon="mdi-expansion-card" class="justify-start px-6">GPU</v-tab>
+            <v-tab value="processes" prepend-icon="mdi-application" class="justify-start px-6">Processes</v-tab>
+          </v-tabs>
 
-        <v-tabs-window v-model="tab" class="pa-4">
-          <!-- Overview Tab -->
-          <v-tabs-window-item value="overview">
-            <v-alert v-if="responseTimeMs !== null" type="info" variant="tonal" density="compact" class="mb-4">
-              <v-icon class="mr-2">mdi-timer-outline</v-icon>
-              Response Time: <strong>{{ responseTimeMs }}ms</strong>
-            </v-alert>
-            <v-row>
-              <v-col cols="12" md="6">
-                <v-card variant="outlined" class="mb-4">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon class="mr-2">mdi-desktop-tower</v-icon>
-                    System
-                  </v-card-title>
-                  <v-card-text>
+          <!-- Tab Content -->
+          <v-window v-model="tab" class="flex-grow-1 fill-height" style="overflow-y: auto;">
+            <!-- Overview Tab -->
+            <v-window-item value="overview" class="pa-6">
+              <v-alert v-if="responseTimeMs !== null" type="info" variant="tonal" density="compact" class="mb-6 rounded-lg border-none bg-opacity-10">
+                <template #prepend>
+                  <v-icon color="info">mdi-timer-outline</v-icon>
+                </template>
+                Response Time: <strong class="text-info">{{ responseTimeMs }}ms</strong>
+              </v-alert>
+
+              <v-row>
+                <v-col cols="12" md="6">
+                  <v-card class="glass-card mb-4 pa-4" variant="flat">
+                    <div class="text-subtitle-2 text-medium-emphasis mb-4 d-flex align-center">
+                      <v-icon size="small" class="mr-2">mdi-desktop-tower</v-icon> SYSTEM
+                    </div>
                     <div class="info-row"><span>Manufacturer</span><span>{{ systemInfo.hardware?.manufacturer || '-' }}</span></div>
                     <div class="info-row"><span>Model</span><span>{{ systemInfo.hardware?.model || '-' }}</span></div>
                     <div class="info-row"><span>System Type</span><span>{{ systemInfo.hardware?.systemType || '-' }}</span></div>
-                    <div class="info-row"><span>UUID</span><span>{{ systemInfo.hardware?.uuid || '-' }}</span></div>
-                  </v-card-text>
-                </v-card>
+                    <div class="info-row"><span>UUID</span><span class="text-caption font-mono">{{ systemInfo.hardware?.uuid || '-' }}</span></div>
+                  </v-card>
 
-                <v-card variant="outlined">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon class="mr-2">mdi-microsoft-windows</v-icon>
-                    Operating System
-                  </v-card-title>
-                  <v-card-text>
+                  <v-card class="glass-card pa-4" variant="flat">
+                    <div class="text-subtitle-2 text-medium-emphasis mb-4 d-flex align-center">
+                      <v-icon size="small" class="mr-2">mdi-microsoft-windows</v-icon> OPERATING SYSTEM
+                    </div>
                     <div class="info-row"><span>Name</span><span>{{ systemInfo.os?.name || '-' }}</span></div>
                     <div class="info-row"><span>Version</span><span>{{ systemInfo.os?.version || '-' }}</span></div>
                     <div class="info-row"><span>Build</span><span>{{ systemInfo.os?.buildNumber || '-' }}</span></div>
                     <div class="info-row"><span>Architecture</span><span>{{ systemInfo.os?.architecture || '-' }}</span></div>
-                    <div class="info-row"><span>Install Date</span><span>{{ systemInfo.os?.installDate || '-' }}</span></div>
-                    <div class="info-row"><span>Last Boot</span><span>{{ systemInfo.os?.lastBootTime || '-' }}</span></div>
                     <div class="info-row"><span>User</span><span>{{ systemInfo.os?.registeredUser || '-' }}</span></div>
-                    <div class="info-row"><span>Timezone</span><span>{{ systemInfo.os?.timezoneName || '-' }}</span></div>
-                  </v-card-text>
-                </v-card>
-              </v-col>
+                  </v-card>
+                </v-col>
 
-              <v-col cols="12" md="6">
-                <v-card variant="outlined" class="mb-4">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon class="mr-2">mdi-speedometer</v-icon>
-                    Performance
-                  </v-card-title>
-                  <v-card-text>
-                    <div class="mb-3">
-                      <div class="d-flex justify-space-between mb-1">
+                <v-col cols="12" md="6">
+                  <v-card class="glass-card mb-4 pa-4" variant="flat">
+                    <div class="text-subtitle-2 text-medium-emphasis mb-4 d-flex align-center">
+                      <v-icon size="small" class="mr-2">mdi-speedometer</v-icon> PERFORMANCE
+                    </div>
+                    
+                    <div class="mb-4">
+                      <div class="d-flex justify-space-between mb-1 text-caption">
                         <span>CPU Usage</span>
-                        <span>{{ systemInfo.performance?.cpuUsagePercent?.toFixed(1) }}%</span>
+                        <span :class="getUsageColorText(systemInfo.performance?.cpuUsagePercent || 0)">
+                          {{ systemInfo.performance?.cpuUsagePercent?.toFixed(1) }}%
+                        </span>
                       </div>
                       <v-progress-linear
                         :model-value="systemInfo.performance?.cpuUsagePercent || 0"
                         :color="getUsageColor(systemInfo.performance?.cpuUsagePercent || 0)"
-                        height="8"
+                        height="6"
                         rounded
+                        bg-color="rgba(255,255,255,0.1)"
                       />
                     </div>
-                    <div class="mb-3">
-                      <div class="d-flex justify-space-between mb-1">
+
+                    <div class="mb-4">
+                      <div class="d-flex justify-space-between mb-1 text-caption">
                         <span>Memory Usage</span>
-                        <span>{{ systemInfo.memory?.memoryLoadPercent }}%</span>
+                        <span :class="getUsageColorText(systemInfo.memory?.memoryLoadPercent || 0)">
+                          {{ systemInfo.memory?.memoryLoadPercent }}%
+                        </span>
                       </div>
                       <v-progress-linear
                         :model-value="systemInfo.memory?.memoryLoadPercent || 0"
                         :color="getUsageColor(systemInfo.memory?.memoryLoadPercent || 0)"
-                        height="8"
+                        height="6"
                         rounded
+                        bg-color="rgba(255,255,255,0.1)"
                       />
                     </div>
-                    <div class="info-row"><span>Processes</span><span>{{ systemInfo.performance?.processCount || '-' }}</span></div>
-                    <div class="info-row"><span>Threads</span><span>{{ systemInfo.performance?.threadCount || '-' }}</span></div>
-                    <div class="info-row"><span>Handles</span><span>{{ systemInfo.performance?.handleCount || '-' }}</span></div>
-                    <div class="info-row"><span>Uptime</span><span>{{ formatUptime(systemInfo.performance?.uptimeSeconds || 0) }}</span></div>
-                  </v-card-text>
-                </v-card>
 
-                <v-card variant="outlined" class="mb-4">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon class="mr-2">mdi-chip</v-icon>
-                    BIOS
-                  </v-card-title>
-                  <v-card-text>
-                    <div class="info-row"><span>Manufacturer</span><span>{{ systemInfo.hardware?.biosManufacturer || '-' }}</span></div>
-                    <div class="info-row"><span>Version</span><span>{{ systemInfo.hardware?.biosVersion || '-' }}</span></div>
-                    <div class="info-row"><span>Release Date</span><span>{{ systemInfo.hardware?.biosReleaseDate || '-' }}</span></div>
-                  </v-card-text>
-                </v-card>
+                    <div class="d-flex justify-space-between mt-4">
+                      <div class="text-center">
+                        <div class="text-h6 font-weight-bold">{{ systemInfo.performance?.processCount || '-' }}</div>
+                        <div class="text-caption text-medium-emphasis">Processes</div>
+                      </div>
+                      <div class="text-center">
+                        <div class="text-h6 font-weight-bold">{{ systemInfo.performance?.threadCount || '-' }}</div>
+                        <div class="text-caption text-medium-emphasis">Threads</div>
+                      </div>
+                      <div class="text-center">
+                        <div class="text-h6 font-weight-bold">{{ formatUptime(systemInfo.performance?.uptimeSeconds || 0) }}</div>
+                        <div class="text-caption text-medium-emphasis">Uptime</div>
+                      </div>
+                    </div>
+                  </v-card>
 
-                <v-card variant="outlined">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon class="mr-2">mdi-lightning-bolt</v-icon>
-                    Quick Actions
-                  </v-card-title>
-                  <v-card-text class="d-flex flex-column ga-2">
-                    <v-btn
-                      color="warning"
-                      variant="tonal"
-                      prepend-icon="mdi-shield-off"
-                      :loading="disablingUac"
-                      block
-                      @click="disableUac"
-                    >
-                      Disable UAC
-                    </v-btn>
-                    <v-btn
-                      color="error"
-                      variant="tonal"
-                      prepend-icon="mdi-power"
-                      :loading="powerActionLoading === 'shutdown'"
-                      block
-                      @click="sendPowerCommand('shutdown', 'Shut Down')"
-                    >
-                      Shut Down
-                    </v-btn>
-                    <v-btn
-                      color="warning"
-                      variant="tonal"
-                      prepend-icon="mdi-restart"
-                      :loading="powerActionLoading === 'restart'"
-                      block
-                      @click="sendPowerCommand('restart', 'Restart')"
-                    >
-                      Restart
-                    </v-btn>
-                    <v-btn
-                      color="info"
-                      variant="tonal"
-                      prepend-icon="mdi-logout"
-                      :loading="powerActionLoading === 'signout'"
-                      block
-                      @click="sendPowerCommand('signout', 'Sign Out')"
-                    >
-                      Sign Out
-                    </v-btn>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
-          </v-tabs-window-item>
+                  <v-card class="glass-card pa-4" variant="flat">
+                    <div class="text-subtitle-2 text-medium-emphasis mb-4 d-flex align-center">
+                      <v-icon size="small" class="mr-2">mdi-lightning-bolt</v-icon> QUICK ACTIONS
+                    </div>
+                    <div class="d-grid gap-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                      <v-btn
+                        color="warning"
+                        variant="tonal"
+                        prepend-icon="mdi-shield-off"
+                        :loading="disablingUac"
+                        @click="disableUac"
+                        class="flex-grow-1"
+                      >
+                        Disable UAC
+                      </v-btn>
+                      <v-btn
+                        color="info"
+                        variant="tonal"
+                        prepend-icon="mdi-logout"
+                        :loading="powerActionLoading === 'signout'"
+                        @click="sendPowerCommand('signout', 'Sign Out')"
+                        class="flex-grow-1"
+                      >
+                        Sign Out
+                      </v-btn>
+                      <v-btn
+                        color="warning"
+                        variant="tonal"
+                        prepend-icon="mdi-restart"
+                        :loading="powerActionLoading === 'restart'"
+                        @click="sendPowerCommand('restart', 'Restart')"
+                        class="flex-grow-1"
+                      >
+                        Restart
+                      </v-btn>
+                      <v-btn
+                        color="error"
+                        variant="tonal"
+                        prepend-icon="mdi-power"
+                        :loading="powerActionLoading === 'shutdown'"
+                        @click="sendPowerCommand('shutdown', 'Shut Down')"
+                        class="flex-grow-1"
+                      >
+                        Shut Down
+                      </v-btn>
+                    </div>
+                  </v-card>
+                </v-col>
+              </v-row>
+            </v-window-item>
 
-          <!-- CPU Tab -->
-          <v-tabs-window-item value="cpu">
-            <v-card variant="outlined">
-              <v-card-title class="text-subtitle-1">
-                <v-icon class="mr-2">mdi-chip</v-icon>
-                Processor
-              </v-card-title>
-              <v-card-text>
-                <div class="info-row"><span>Name</span><span>{{ systemInfo.cpu?.name || '-' }}</span></div>
-                <div class="info-row"><span>Manufacturer</span><span>{{ systemInfo.cpu?.manufacturer || '-' }}</span></div>
-                <div class="info-row"><span>Architecture</span><span>{{ systemInfo.cpu?.architecture || '-' }}</span></div>
-                <div class="info-row"><span>Cores</span><span>{{ systemInfo.cpu?.cores || '-' }}</span></div>
-                <div class="info-row"><span>Logical Processors</span><span>{{ systemInfo.cpu?.logicalProcessors || '-' }}</span></div>
-                <div class="info-row"><span>Max Clock Speed</span><span>{{ systemInfo.cpu?.maxClockSpeedMhz ? `${systemInfo.cpu.maxClockSpeedMhz} MHz` : '-' }}</span></div>
-                <div class="info-row"><span>Current Clock Speed</span><span>{{ systemInfo.cpu?.currentClockSpeedMhz ? `${systemInfo.cpu.currentClockSpeedMhz} MHz` : '-' }}</span></div>
-                <div class="info-row"><span>L2 Cache</span><span>{{ systemInfo.cpu?.l2CacheKb ? `${systemInfo.cpu.l2CacheKb} KB` : '-' }}</span></div>
-                <div class="info-row"><span>L3 Cache</span><span>{{ systemInfo.cpu?.l3CacheKb ? `${(systemInfo.cpu.l3CacheKb / 1024).toFixed(1)} MB` : '-' }}</span></div>
-              </v-card-text>
-            </v-card>
-          </v-tabs-window-item>
-
-          <!-- Memory Tab -->
-          <v-tabs-window-item value="memory">
-            <v-card variant="outlined" class="mb-4">
-              <v-card-title class="text-subtitle-1">
-                <v-icon class="mr-2">mdi-memory</v-icon>
-                Physical Memory
-              </v-card-title>
-              <v-card-text>
-                <div class="mb-4">
-                  <div class="d-flex justify-space-between mb-1">
-                    <span>Usage: {{ formatBytes(usedMemory) }} / {{ formatBytes(systemInfo.memory?.totalPhysicalBytes || 0) }}</span>
-                    <span>{{ systemInfo.memory?.memoryLoadPercent }}%</span>
+            <!-- CPU Tab -->
+            <v-window-item value="cpu" class="pa-6">
+              <v-card class="glass-card pa-6" variant="flat">
+                <div class="d-flex align-center mb-6">
+                  <v-avatar color="primary" variant="tonal" class="mr-4">
+                    <v-icon color="primary">mdi-chip</v-icon>
+                  </v-avatar>
+                  <div>
+                    <div class="text-h6">{{ systemInfo.cpu?.name || 'Unknown Processor' }}</div>
+                    <div class="text-caption text-medium-emphasis">{{ systemInfo.cpu?.manufacturer }}</div>
                   </div>
-                  <v-progress-linear
-                    :model-value="systemInfo.memory?.memoryLoadPercent || 0"
-                    :color="getUsageColor(systemInfo.memory?.memoryLoadPercent || 0)"
-                    height="20"
-                    rounded
-                  />
                 </div>
-                <div class="info-row"><span>Total Physical</span><span>{{ formatBytes(systemInfo.memory?.totalPhysicalBytes || 0) }}</span></div>
-                <div class="info-row"><span>Available Physical</span><span>{{ formatBytes(systemInfo.memory?.availablePhysicalBytes || 0) }}</span></div>
-                <div class="info-row"><span>Total Virtual</span><span>{{ formatBytes(systemInfo.memory?.totalVirtualBytes || 0) }}</span></div>
-                <div class="info-row"><span>Available Virtual</span><span>{{ formatBytes(systemInfo.memory?.availableVirtualBytes || 0) }}</span></div>
-                <div class="info-row"><span>Memory Type</span><span>{{ systemInfo.memory?.memoryType || '-' }}</span></div>
-                <div class="info-row"><span>Speed</span><span>{{ systemInfo.memory?.speedMhz ? `${systemInfo.memory.speedMhz} MHz` : '-' }}</span></div>
-                <div class="info-row"><span>Slots Used</span><span>{{ systemInfo.memory?.slotCount || '-' }}</span></div>
-              </v-card-text>
-            </v-card>
-          </v-tabs-window-item>
+                
+                <v-divider class="mb-6 border-opacity-10"></v-divider>
 
-          <!-- Storage Tab -->
-          <v-tabs-window-item value="storage">
-            <div class="scrollable-tab">
-            <v-card v-for="disk in systemInfo.disks" :key="disk.driveLetter" variant="outlined" class="mb-4">
-              <v-card-title class="text-subtitle-1">
-                <v-icon class="mr-2">{{ disk.driveType === 'Fixed' ? 'mdi-harddisk' : 'mdi-usb-flash-drive' }}</v-icon>
-                {{ disk.driveLetter }} {{ disk.volumeLabel ? `(${disk.volumeLabel})` : '' }}
-                <v-chip v-if="disk.isSystemDrive" size="x-small" color="primary" class="ml-2">System</v-chip>
-              </v-card-title>
-              <v-card-text>
-                <div class="mb-4">
-                  <div class="d-flex justify-space-between mb-1">
-                    <span>Used: {{ formatBytes(disk.totalBytes - disk.freeBytes) }} / {{ formatBytes(disk.totalBytes) }}</span>
-                    <span>{{ getDiskUsagePercent(disk) }}%</span>
+                <div class="d-grid-3 gap-6" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px;">
+                  <div>
+                    <div class="text-caption text-medium-emphasis mb-1">Architecture</div>
+                    <div class="text-body-1">{{ systemInfo.cpu?.architecture || '-' }}</div>
                   </div>
-                  <v-progress-linear
-                    :model-value="getDiskUsagePercent(disk)"
-                    :color="getUsageColor(getDiskUsagePercent(disk))"
-                    height="12"
-                    rounded
-                  />
+                  <div>
+                    <div class="text-caption text-medium-emphasis mb-1">Cores / Threads</div>
+                    <div class="text-body-1">{{ systemInfo.cpu?.cores || '-' }} / {{ systemInfo.cpu?.logicalProcessors || '-' }}</div>
+                  </div>
+                  <div>
+                    <div class="text-caption text-medium-emphasis mb-1">Max Speed</div>
+                    <div class="text-body-1">{{ systemInfo.cpu?.maxClockSpeedMhz ? `${systemInfo.cpu.maxClockSpeedMhz} MHz` : '-' }}</div>
+                  </div>
+                  <div>
+                    <div class="text-caption text-medium-emphasis mb-1">L2 Cache</div>
+                    <div class="text-body-1">{{ systemInfo.cpu?.l2CacheKb ? `${systemInfo.cpu.l2CacheKb} KB` : '-' }}</div>
+                  </div>
+                  <div>
+                    <div class="text-caption text-medium-emphasis mb-1">L3 Cache</div>
+                    <div class="text-body-1">{{ systemInfo.cpu?.l3CacheKb ? `${(systemInfo.cpu.l3CacheKb / 1024).toFixed(1)} MB` : '-' }}</div>
+                  </div>
                 </div>
-                <div class="info-row"><span>Free Space</span><span>{{ formatBytes(disk.freeBytes) }}</span></div>
-                <div class="info-row"><span>File System</span><span>{{ disk.fileSystem || '-' }}</span></div>
-                <div class="info-row"><span>Drive Type</span><span>{{ disk.driveType || '-' }}</span></div>
-              </v-card-text>
-            </v-card>
-            </div>
-          </v-tabs-window-item>
+              </v-card>
+            </v-window-item>
 
-          <!-- Network Tab -->
-          <v-tabs-window-item value="network">
-            <div class="scrollable-tab">
-            <v-card v-for="adapter in systemInfo.networkAdapters" :key="adapter.macAddress" variant="outlined" class="mb-4">
-              <v-card-title class="text-subtitle-1">
-                <v-icon class="mr-2">{{ adapter.adapterType.includes('Wireless') ? 'mdi-wifi' : 'mdi-ethernet' }}</v-icon>
-                {{ adapter.name }}
-                <v-chip :color="adapter.status === 'Up' ? 'success' : 'grey'" size="x-small" class="ml-2">
-                  {{ adapter.status }}
-                </v-chip>
-              </v-card-title>
-              <v-card-text>
-                <div class="info-row"><span>Description</span><span>{{ adapter.description || '-' }}</span></div>
-                <div class="info-row"><span>Type</span><span>{{ adapter.adapterType || '-' }}</span></div>
-                <div class="info-row"><span>MAC Address</span><span>{{ formatMacAddress(adapter.macAddress) }}</span></div>
-                <div class="info-row"><span>IP Address</span><span>{{ adapter.ipAddress || '-' }}</span></div>
-                <div class="info-row"><span>Subnet Mask</span><span>{{ adapter.subnetMask || '-' }}</span></div>
-                <div class="info-row"><span>Gateway</span><span>{{ adapter.defaultGateway || '-' }}</span></div>
-                <div class="info-row"><span>DNS Servers</span><span>{{ adapter.dnsServers || '-' }}</span></div>
-                <div class="info-row"><span>Speed</span><span>{{ formatNetworkSpeed(adapter.speedBps) }}</span></div>
-                <div class="info-row"><span>DHCP</span><span>{{ adapter.isDhcpEnabled ? 'Enabled' : 'Disabled' }}</span></div>
-              </v-card-text>
-            </v-card>
-            </div>
-          </v-tabs-window-item>
+            <!-- Memory Tab -->
+            <v-window-item value="memory" class="pa-6">
+              <v-card class="glass-card pa-6 mb-6" variant="flat">
+                <div class="d-flex align-center justify-space-between mb-6">
+                  <div class="d-flex align-center">
+                    <v-avatar color="secondary" variant="tonal" class="mr-4">
+                      <v-icon color="secondary">mdi-memory</v-icon>
+                    </v-avatar>
+                    <div>
+                      <div class="text-h6">Physical Memory</div>
+                      <div class="text-caption text-medium-emphasis">{{ formatBytes(systemInfo.memory?.totalPhysicalBytes || 0) }} Total</div>
+                    </div>
+                  </div>
+                  <div class="text-h4 font-weight-bold" :class="getUsageColorText(systemInfo.memory?.memoryLoadPercent || 0)">
+                    {{ systemInfo.memory?.memoryLoadPercent }}%
+                  </div>
+                </div>
 
-          <!-- GPU Tab -->
-          <v-tabs-window-item value="gpu">
-            <v-card v-for="(gpu, index) in systemInfo.gpus" :key="index" variant="outlined" class="mb-4">
-              <v-card-title class="text-subtitle-1">
-                <v-icon class="mr-2">mdi-expansion-card</v-icon>
-                {{ gpu.name }}
-              </v-card-title>
-              <v-card-text>
-                <div class="info-row"><span>Manufacturer</span><span>{{ gpu.manufacturer || '-' }}</span></div>
-                <div class="info-row"><span>Video Processor</span><span>{{ gpu.videoProcessor || '-' }}</span></div>
-                <div class="info-row"><span>Video Memory</span><span>{{ formatBytes(gpu.videoMemoryBytes) }}</span></div>
-                <div class="info-row"><span>Resolution</span><span>{{ gpu.resolution || '-' }}</span></div>
-                <div class="info-row"><span>Refresh Rate</span><span>{{ gpu.currentRefreshRate ? `${gpu.currentRefreshRate} Hz` : '-' }}</span></div>
-                <div class="info-row"><span>Driver Version</span><span>{{ gpu.driverVersion || '-' }}</span></div>
-              </v-card-text>
-            </v-card>
-            <v-alert v-if="systemInfo.gpus.length === 0" type="info" variant="tonal">
-              No GPU information available
-            </v-alert>
-          </v-tabs-window-item>
+                <v-progress-linear
+                  :model-value="systemInfo.memory?.memoryLoadPercent || 0"
+                  :color="getUsageColor(systemInfo.memory?.memoryLoadPercent || 0)"
+                  height="12"
+                  rounded
+                  bg-color="rgba(255,255,255,0.1)"
+                  class="mb-2"
+                />
+                <div class="d-flex justify-space-between text-caption text-medium-emphasis">
+                  <span>Used: {{ formatBytes(usedMemory) }}</span>
+                  <span>Available: {{ formatBytes(systemInfo.memory?.availablePhysicalBytes || 0) }}</span>
+                </div>
+              </v-card>
 
-          <!-- Processes Tab -->
-          <v-tabs-window-item value="processes">
-            <v-card variant="outlined">
-              <v-card-title class="text-subtitle-1 d-flex align-center">
-                <v-icon class="mr-2">mdi-application</v-icon>
-                Processes ({{ filteredProcesses.length }} / {{ systemInfo.performance?.topProcesses?.length || 0 }})
-                <v-spacer />
+              <v-card class="glass-card pa-6" variant="flat">
+                <div class="text-subtitle-2 text-medium-emphasis mb-4">DETAILS</div>
+                <div class="d-grid-2 gap-4" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div class="info-row"><span>Total Virtual</span><span>{{ formatBytes(systemInfo.memory?.totalVirtualBytes || 0) }}</span></div>
+                  <div class="info-row"><span>Available Virtual</span><span>{{ formatBytes(systemInfo.memory?.availableVirtualBytes || 0) }}</span></div>
+                  <div class="info-row"><span>Memory Type</span><span>{{ systemInfo.memory?.memoryType || '-' }}</span></div>
+                  <div class="info-row"><span>Speed</span><span>{{ systemInfo.memory?.speedMhz ? `${systemInfo.memory.speedMhz} MHz` : '-' }}</span></div>
+                  <div class="info-row"><span>Slots Used</span><span>{{ systemInfo.memory?.slotCount || '-' }}</span></div>
+                </div>
+              </v-card>
+            </v-window-item>
+
+            <!-- Storage Tab -->
+            <v-window-item value="storage" class="pa-6">
+              <div class="d-flex flex-column gap-4">
+                <v-card v-for="disk in systemInfo.disks" :key="disk.driveLetter" class="glass-card pa-4" variant="flat">
+                  <div class="d-flex align-center mb-4">
+                    <v-icon size="large" class="mr-3" color="primary">
+                      {{ disk.driveType === 'Fixed' ? 'mdi-harddisk' : 'mdi-usb-flash-drive' }}
+                    </v-icon>
+                    <div>
+                      <div class="text-subtitle-1 font-weight-bold">
+                        {{ disk.driveLetter }} <span class="text-medium-emphasis font-weight-regular">{{ disk.volumeLabel ? `(${disk.volumeLabel})` : '' }}</span>
+                      </div>
+                      <div class="text-caption text-medium-emphasis">{{ disk.fileSystem }} • {{ disk.driveType }}</div>
+                    </div>
+                    <v-spacer />
+                    <v-chip v-if="disk.isSystemDrive" size="small" color="primary" variant="tonal">System</v-chip>
+                  </div>
+
+                  <div class="mb-2">
+                    <div class="d-flex justify-space-between mb-1 text-caption">
+                      <span>{{ formatBytes(disk.totalBytes - disk.freeBytes) }} used</span>
+                      <span>{{ formatBytes(disk.freeBytes) }} free</span>
+                    </div>
+                    <v-progress-linear
+                      :model-value="getDiskUsagePercent(disk)"
+                      :color="getUsageColor(getDiskUsagePercent(disk))"
+                      height="8"
+                      rounded
+                      bg-color="rgba(255,255,255,0.1)"
+                    />
+                  </div>
+                </v-card>
+              </div>
+            </v-window-item>
+
+            <!-- Network Tab -->
+            <v-window-item value="network" class="pa-6">
+              <div class="d-flex flex-column gap-4">
+                <v-card v-for="adapter in systemInfo.networkAdapters" :key="adapter.macAddress" class="glass-card pa-4" variant="flat">
+                  <div class="d-flex align-center justify-space-between mb-4">
+                    <div class="d-flex align-center">
+                      <v-icon class="mr-3" :color="adapter.status === 'Up' ? 'success' : 'grey'">
+                        {{ adapter.adapterType.includes('Wireless') ? 'mdi-wifi' : 'mdi-ethernet' }}
+                      </v-icon>
+                      <div class="text-subtitle-1 font-weight-medium text-truncate" style="max-width: 300px;">
+                        {{ adapter.name }}
+                      </div>
+                    </div>
+                    <v-chip :color="adapter.status === 'Up' ? 'success' : 'grey'" size="small" variant="tonal">
+                      {{ adapter.status }}
+                    </v-chip>
+                  </div>
+
+                  <div class="info-row"><span>Description</span><span class="text-truncate" style="max-width: 60%;">{{ adapter.description || '-' }}</span></div>
+                  <div class="info-row"><span>MAC Address</span><span class="font-mono">{{ formatMacAddress(adapter.macAddress) }}</span></div>
+                  <div class="info-row"><span>IP Address</span><span class="font-mono">{{ adapter.ipAddress || '-' }}</span></div>
+                  <div class="info-row"><span>Gateway</span><span class="font-mono">{{ adapter.defaultGateway || '-' }}</span></div>
+                  <div class="info-row"><span>Speed</span><span>{{ formatNetworkSpeed(adapter.speedBps) }}</span></div>
+                </v-card>
+              </div>
+            </v-window-item>
+
+            <!-- GPU Tab -->
+            <v-window-item value="gpu" class="pa-6">
+              <div v-if="systemInfo.gpus.length === 0" class="text-center py-8 text-medium-emphasis">
+                <v-icon size="48" class="mb-2">mdi-expansion-card-variant</v-icon>
+                <div>No GPU information available</div>
+              </div>
+              
+              <div v-else class="d-flex flex-column gap-4">
+                <v-card v-for="(gpu, index) in systemInfo.gpus" :key="index" class="glass-card pa-4" variant="flat">
+                  <div class="d-flex align-center mb-4">
+                    <v-avatar color="purple" variant="tonal" class="mr-3">
+                      <v-icon color="purple">mdi-expansion-card</v-icon>
+                    </v-avatar>
+                    <div class="text-h6">{{ gpu.name }}</div>
+                  </div>
+                  
+                  <div class="info-row"><span>Manufacturer</span><span>{{ gpu.manufacturer || '-' }}</span></div>
+                  <div class="info-row"><span>Video Memory</span><span>{{ formatBytes(gpu.videoMemoryBytes) }}</span></div>
+                  <div class="info-row"><span>Resolution</span><span>{{ gpu.resolution || '-' }}</span></div>
+                  <div class="info-row"><span>Refresh Rate</span><span>{{ gpu.currentRefreshRate ? `${gpu.currentRefreshRate} Hz` : '-' }}</span></div>
+                  <div class="info-row"><span>Driver Version</span><span>{{ gpu.driverVersion || '-' }}</span></div>
+                </v-card>
+              </div>
+            </v-window-item>
+
+            <!-- Processes Tab -->
+            <v-window-item value="processes" class="pa-6 fill-height d-flex flex-column">
+              <div class="d-flex align-center mb-4">
                 <v-text-field
                   v-model="processSearch"
                   density="compact"
                   variant="outlined"
-                  placeholder="Search by PID or Name..."
+                  placeholder="Search processes..."
                   prepend-inner-icon="mdi-magnify"
                   hide-details
-                  clearable
-                  style="max-width: 250px;"
-                  class="ml-4"
+                  class="glass-card rounded-lg flex-grow-1"
+                  bg-color="transparent"
                 />
-              </v-card-title>
-              <v-card-text class="pa-0">
-                <div class="processes-table-container">
-                  <v-table density="compact" hover>
-                    <thead>
-                      <tr>
-                        <th>PID</th>
-                        <th>Name</th>
-                        <th class="text-right">Memory</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="proc in filteredProcesses"
-                        :key="proc.pid"
-                        class="process-row"
-                        @contextmenu.prevent="showProcessContextMenu($event, proc)"
-                      >
-                        <td>{{ proc.pid }}</td>
-                        <td>{{ proc.name }}</td>
-                        <td class="text-right">{{ formatBytes(proc.memoryBytes) }}</td>
-                      </tr>
-                      <tr v-if="filteredProcesses.length === 0">
-                        <td colspan="3" class="text-center text-grey py-4">
-                          No processes found matching "{{ processSearch }}"
-                        </td>
-                      </tr>
-                    </tbody>
-                  </v-table>
+                <div class="ml-4 text-caption text-medium-emphasis">
+                  {{ filteredProcesses.length }} processes
                 </div>
-              </v-card-text>
-            </v-card>
-          </v-tabs-window-item>
-        </v-tabs-window>
+              </div>
+
+              <v-card class="glass-card flex-grow-1 d-flex flex-column" variant="flat" style="overflow: hidden;">
+                <v-table density="compact" hover class="bg-transparent flex-grow-1" fixed-header>
+                  <thead>
+                    <tr>
+                      <th class="text-left bg-transparent">PID</th>
+                      <th class="text-left bg-transparent">Name</th>
+                      <th class="text-right bg-transparent">Memory</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="proc in filteredProcesses"
+                      :key="proc.pid"
+                      class="process-row"
+                      :class="{ 'frozen-process': isProcessFrozen(proc.pid) }"
+                      @contextmenu.prevent="showProcessContextMenu($event, proc)"
+                    >
+                      <td class="text-medium-emphasis font-mono">{{ proc.pid }}</td>
+                      <td class="font-weight-medium">
+                        <v-icon v-if="isProcessFrozen(proc.pid)" size="small" color="info" class="mr-1">mdi-snowflake</v-icon>
+                        {{ proc.name }}
+                      </td>
+                      <td class="text-right font-mono">{{ formatBytes(proc.memoryBytes) }}</td>
+                    </tr>
+                    <tr v-if="filteredProcesses.length === 0">
+                      <td colspan="3" class="text-center text-medium-emphasis py-8">
+                        No processes found matching "{{ processSearch }}"
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </v-card>
+            </v-window-item>
+          </v-window>
+        </div>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -363,30 +422,48 @@
     v-model="processContextMenu.show"
     :style="{ position: 'fixed', left: processContextMenu.x + 'px', top: processContextMenu.y + 'px' }"
     location-strategy="connected"
-    scroll-strategy="close"
   >
-    <v-list density="compact" class="py-0">
+    <v-list density="compact" class="glass-panel py-2" width="220">
       <v-list-item
+        v-if="selectedProcess && !isProcessFrozen(selectedProcess.pid)"
         prepend-icon="mdi-snowflake"
         title="Freeze Process"
-        disabled
+        :disabled="freezingProcess"
         @click="freezeProcess"
-      />
+        class="text-info"
+      >
+        <template #append>
+          <v-progress-circular v-if="freezingProcess" indeterminate size="16" width="2" color="info" />
+        </template>
+      </v-list-item>
+      <v-list-item
+        v-else-if="selectedProcess && isProcessFrozen(selectedProcess.pid)"
+        prepend-icon="mdi-play"
+        title="Resume Process"
+        :disabled="freezingProcess"
+        @click="resumeProcess"
+        class="text-success"
+      >
+        <template #append>
+          <v-progress-circular v-if="freezingProcess" indeterminate size="16" width="2" color="success" />
+        </template>
+      </v-list-item>
       <v-list-item
         prepend-icon="mdi-skull"
         title="Kill Process"
         :disabled="killingProcess"
         @click="killProcess"
+        class="text-error"
       >
         <template #append>
-          <v-progress-circular v-if="killingProcess" indeterminate size="16" width="2" />
+          <v-progress-circular v-if="killingProcess" indeterminate size="16" width="2" color="error" />
         </template>
       </v-list-item>
     </v-list>
   </v-menu>
 
-  <!-- Kill Process Confirmation Snackbar -->
-  <v-snackbar v-model="killSnackbar.show" :color="killSnackbar.color" :timeout="3000">
+  <!-- Snackbar -->
+  <v-snackbar v-model="killSnackbar.show" :color="killSnackbar.color" :timeout="3000" location="bottom right">
     {{ killSnackbar.message }}
   </v-snackbar>
 </template>
@@ -419,6 +496,8 @@ const responseTimeMs = ref<number | null>(null)
 // Process tab state
 const processSearch = ref('')
 const killingProcess = ref(false)
+const freezingProcess = ref(false)
+const frozenProcesses = ref<Set<number>>(new Set())
 const disablingUac = ref(false)
 const powerActionLoading = ref<string | null>(null)
 const selectedProcess = ref<ProcessInfoDto | null>(null)
@@ -525,6 +604,12 @@ function getUsageColor(percent: number): string {
   return 'success'
 }
 
+function getUsageColorText(percent: number): string {
+  if (percent >= 90) return 'text-error'
+  if (percent >= 70) return 'text-warning'
+  return 'text-success'
+}
+
 // Quick actions
 async function disableUac() {
   if (!props.client) return
@@ -596,9 +681,76 @@ function showProcessContextMenu(event: MouseEvent, process: ProcessInfoDto) {
   processContextMenu.show = true
 }
 
-function freezeProcess() {
-  // Not implemented yet
+function isProcessFrozen(pid: number): boolean {
+  return frozenProcesses.value.has(pid)
+}
+
+async function freezeProcess() {
+  if (!selectedProcess.value || !props.client) return
+
+  freezingProcess.value = true
   processContextMenu.show = false
+
+  try {
+    const command = {
+      connectionKey: props.client.connectionKey,
+      commandType: 'freezeprocess',
+      commandText: selectedProcess.value.pid.toString(),
+      timeoutSeconds: 10
+    }
+
+    const success = await signalRService.executeCommand(command)
+
+    if (success) {
+      frozenProcesses.value.add(selectedProcess.value.pid)
+      killSnackbar.message = `Process ${selectedProcess.value.name} (PID: ${selectedProcess.value.pid}) frozen`
+      killSnackbar.color = 'info'
+    } else {
+      killSnackbar.message = `Failed to freeze process ${selectedProcess.value.name}`
+      killSnackbar.color = 'error'
+    }
+  } catch (e) {
+    killSnackbar.message = e instanceof Error ? e.message : 'Failed to freeze process'
+    killSnackbar.color = 'error'
+  } finally {
+    freezingProcess.value = false
+    killSnackbar.show = true
+    selectedProcess.value = null
+  }
+}
+
+async function resumeProcess() {
+  if (!selectedProcess.value || !props.client) return
+
+  freezingProcess.value = true
+  processContextMenu.show = false
+
+  try {
+    const command = {
+      connectionKey: props.client.connectionKey,
+      commandType: 'resumeprocess',
+      commandText: selectedProcess.value.pid.toString(),
+      timeoutSeconds: 10
+    }
+
+    const success = await signalRService.executeCommand(command)
+
+    if (success) {
+      frozenProcesses.value.delete(selectedProcess.value.pid)
+      killSnackbar.message = `Process ${selectedProcess.value.name} (PID: ${selectedProcess.value.pid}) resumed`
+      killSnackbar.color = 'success'
+    } else {
+      killSnackbar.message = `Failed to resume process ${selectedProcess.value.name}`
+      killSnackbar.color = 'error'
+    }
+  } catch (e) {
+    killSnackbar.message = e instanceof Error ? e.message : 'Failed to resume process'
+    killSnackbar.color = 'error'
+  } finally {
+    freezingProcess.value = false
+    killSnackbar.show = true
+    selectedProcess.value = null
+  }
 }
 
 async function killProcess() {
@@ -640,45 +792,62 @@ async function killProcess() {
 </script>
 
 <style scoped>
-.v-tabs-window {
-  min-height: 400px;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.scrollable-tab {
-  max-height: 50vh;
-  overflow-y: auto;
-  padding-right: 8px;
-}
-
-.processes-table-container {
-  max-height: 45vh;
-  overflow-y: auto;
-}
-
-.process-row {
-  cursor: context-menu;
-}
-
-.process-row:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-row:last-child {
+  border-bottom: none;
 }
 
 .info-row span:first-child {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
 }
 
 .info-row span:last-child {
   text-align: right;
   max-width: 60%;
   word-break: break-all;
+  font-weight: 500;
+}
+
+.process-row {
+  cursor: context-menu;
+  transition: background-color 0.2s;
+}
+
+.process-row:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.frozen-process {
+  background-color: rgba(33, 150, 243, 0.1) !important;
+}
+
+.frozen-process:hover {
+  background-color: rgba(33, 150, 243, 0.15) !important;
+}
+
+/* Custom Scrollbar for tabs */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>
