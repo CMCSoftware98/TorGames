@@ -10,6 +10,7 @@ import MainLayout from '@/layouts/MainLayout.vue'
 import ClientManagerDialog from '@/components/ClientManagerDialog.vue'
 import FileExplorerDialog from '@/components/FileExplorerDialog.vue'
 import VersionManagement from '@/components/VersionManagement.vue'
+import SavedDataPanel from '@/components/SavedDataPanel.vue'
 import type { ClientDto } from '@/types/client'
 import type { VersionInfo } from '@/types/version'
 
@@ -454,12 +455,8 @@ onUnmounted(async () => {
       </div>
     </div>
 
-    <div v-else-if="activeTab === 'data'" class="fill-height d-flex align-center justify-center">
-      <div class="text-center">
-        <v-icon size="64" color="surface-variant" class="mb-4">mdi-database-outline</v-icon>
-        <div class="text-h5 font-weight-light text-medium-emphasis">Saved Data</div>
-        <div class="text-caption text-disabled mt-2">Module under construction</div>
-      </div>
+    <div v-else-if="activeTab === 'data'" class="fill-height">
+      <SavedDataPanel />
     </div>
 
     <div v-else-if="activeTab === 'server'" class="fill-height">

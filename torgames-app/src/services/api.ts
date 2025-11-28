@@ -220,3 +220,256 @@ export async function getIpGeolocation(ip: string): Promise<GeoLocation | null> 
     return null
   }
 }
+
+// Database API
+
+export interface DatabaseStats {
+  totalClients: number
+  flaggedClients: number
+  blockedClients: number
+  clientsSeenToday: number
+  clientsSeenThisWeek: number
+  totalConnections: number
+  connectionsToday: number
+  totalCommands: number
+  commandsToday: number
+}
+
+export interface DatabaseClient {
+  clientId: string
+  clientType: string
+  machineName: string
+  username: string
+  osVersion: string
+  osArchitecture: string
+  cpuCount: number
+  totalMemoryBytes: number
+  macAddress: string
+  lastIpAddress: string
+  countryCode: string
+  isAdmin: boolean
+  isUacEnabled: boolean
+  clientVersion: string
+  label: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+  totalConnections: number
+  isFlagged: boolean
+  isBlocked: boolean
+}
+
+export interface ClientConnection {
+  id: number
+  ipAddress: string
+  countryCode: string
+  clientVersion: string
+  connectedAt: string
+  disconnectedAt: string | null
+  durationSeconds: number | null
+  disconnectReason: string | null
+}
+
+export interface DatabaseClientDetail extends DatabaseClient {
+  connections: ClientConnection[]
+}
+
+export interface CommandLog {
+  id: number
+  commandId: string
+  clientId: string | null
+  commandType: string
+  commandText: string
+  sentAt: string
+  wasDelivered: boolean
+  resultReceivedAt: string | null
+  success: boolean | null
+  resultOutput: string | null
+  errorMessage: string | null
+  isBroadcast: boolean
+  initiatorIp: string | null
+}
+
+export interface DatabaseInfo {
+  filePath: string
+  fileSizeBytes: number
+  createdAt: string
+  modifiedAt: string
+}
+
+export async function getDatabaseStats(token: string): Promise<DatabaseStats | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/database/stats`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to get database stats:', response.status)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Get database stats failed:', error)
+    return null
+  }
+}
+
+export async function getDatabaseClients(
+  token: string,
+  options?: { flagged?: boolean; blocked?: boolean; country?: string; limit?: number }
+): Promise<DatabaseClient[]> {
+  try {
+    const params = new URLSearchParams()
+    if (options?.flagged !== undefined) params.append('flagged', options.flagged.toString())
+    if (options?.blocked !== undefined) params.append('blocked', options.blocked.toString())
+    if (options?.country) params.append('country', options.country)
+    if (options?.limit) params.append('limit', options.limit.toString())
+
+    const url = `${API_BASE_URL}/database/clients${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to get database clients:', response.status)
+      return []
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Get database clients failed:', error)
+    return []
+  }
+}
+
+export async function getDatabaseClient(token: string, clientId: string): Promise<DatabaseClientDetail | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/database/clients/${encodeURIComponent(clientId)}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to get database client:', response.status)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Get database client failed:', error)
+    return null
+  }
+}
+
+export async function updateDatabaseClient(
+  token: string,
+  clientId: string,
+  updates: { isFlagged?: boolean; isBlocked?: boolean; label?: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/database/clients/${encodeURIComponent(clientId)}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    })
+
+    if (!response.ok) {
+      return { success: false, error: `Server error: ${response.status}` }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Update database client failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update client',
+    }
+  }
+}
+
+export async function deleteDatabaseClient(
+  token: string,
+  clientId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/database/clients/${encodeURIComponent(clientId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      return { success: false, error: `Server error: ${response.status}` }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Delete database client failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete client',
+    }
+  }
+}
+
+export async function getCommandLogs(
+  token: string,
+  options?: { clientId?: string; commandType?: string; limit?: number }
+): Promise<CommandLog[]> {
+  try {
+    const params = new URLSearchParams()
+    if (options?.clientId) params.append('clientId', options.clientId)
+    if (options?.commandType) params.append('commandType', options.commandType)
+    if (options?.limit) params.append('limit', options.limit.toString())
+
+    const url = `${API_BASE_URL}/database/commands${params.toString() ? '?' + params.toString() : ''}`
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to get command logs:', response.status)
+      return []
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Get command logs failed:', error)
+    return []
+  }
+}
+
+export async function getDatabaseInfo(token: string): Promise<DatabaseInfo | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/database/info`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to get database info:', response.status)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Get database info failed:', error)
+    return null
+  }
+}
+
+export function getDatabaseBackupUrl(): string {
+  return `${API_BASE_URL}/database/backup`
+}

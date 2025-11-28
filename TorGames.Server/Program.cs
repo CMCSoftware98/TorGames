@@ -1,6 +1,10 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using TorGames.Database;
+using TorGames.Database.Extensions;
+using TorGames.Database.Services;
 using TorGames.Server.Hubs;
 using TorGames.Server.Services;
 
@@ -41,6 +45,14 @@ builder.Services.AddSingleton<JwtService>();
 
 // Add Update Service
 builder.Services.AddSingleton<UpdateService>();
+
+// Add Database
+var dataFolder = Path.Combine(AppContext.BaseDirectory, "Data");
+Directory.CreateDirectory(dataFolder);
+var databasePath = Path.Combine(dataFolder, "torgames.db");
+builder.Services.AddTorGamesDatabase($"Data Source={databasePath}");
+builder.Services.AddScoped<ClientRepository>();
+builder.Services.AddHostedService<DatabaseSyncService>();
 
 // Add SignalR
 builder.Services.AddSignalR();
@@ -118,6 +130,13 @@ builder.Services.AddCors(options =>
 builder.Logging.AddConsole();
 
 var app = builder.Build();
+
+// Ensure database is created and migrated
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<TorGamesDbContext>();
+    dbContext.Database.EnsureCreated();
+}
 
 // Use CORS
 app.UseCors("TauriApp");
