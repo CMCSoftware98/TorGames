@@ -188,6 +188,35 @@ public class TorServiceImpl : TorService.TorServiceBase
             metrics.AvailableMemoryBytes / 1024 / 1024);
     }
 
+    /// <summary>
+    /// Checks if an IOException is caused by a connection being aborted/reset.
+    /// These are expected when clients disconnect abruptly.
+    /// </summary>
+    private static bool IsConnectionAbortException(IOException ex)
+    {
+        // Check the exception message and inner exceptions for connection abort indicators
+        var message = ex.Message.ToLowerInvariant();
+        if (message.Contains("aborted") || message.Contains("reset"))
+            return true;
+
+        // Check inner exceptions
+        var inner = ex.InnerException;
+        while (inner != null)
+        {
+            var innerMessage = inner.Message.ToLowerInvariant();
+            if (innerMessage.Contains("aborted") ||
+                innerMessage.Contains("reset") ||
+                innerMessage.Contains("connection reset by peer") ||
+                inner is System.Net.Sockets.SocketException)
+            {
+                return true;
+            }
+            inner = inner.InnerException;
+        }
+
+        return false;
+    }
+
     private static async Task SendConnectionResponse(
         IServerStreamWriter<ServerMessage> stream,
         bool accepted,
