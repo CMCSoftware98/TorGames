@@ -26,6 +26,7 @@ const string DefaultApiAddress = "http://144.91.111.101:5001";
 
 // Parse command line arguments
 var isPostUpdate = args.Contains("--post-update");
+var isElevated = args.Contains("--elevated");
 var serverAddress = args.FirstOrDefault(a => a.StartsWith("http://") || a.StartsWith("https://")) ?? DefaultGrpcAddress;
 
 // Parse --version argument (passed by updater)
@@ -72,8 +73,22 @@ builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
     ["Server:ApiAddress"] = DefaultApiAddress
 });
 
+// Use buffered logger that captures logs for remote viewing
+builder.Logging.AddBufferedLogger();
+
 // Add gRPC client service
 builder.Services.AddHostedService<GrpcClientService>();
+
+// Log startup messages to buffer
+LogBuffer.Instance.Add(Microsoft.Extensions.Logging.LogLevel.Information, "Program", $"TorGames Client v{version} starting...");
+LogBuffer.Instance.Add(Microsoft.Extensions.Logging.LogLevel.Information, "Program", $"Connecting to server: {serverAddress}");
+
+// Log if started via elevation request
+if (isElevated)
+{
+    Console.WriteLine("Started with elevated privileges via UAC prompt");
+    LogBuffer.Instance.Add(Microsoft.Extensions.Logging.LogLevel.Information, "Program", "Started with elevated privileges via UAC prompt");
+}
 
 Console.WriteLine($"TorGames Client v{version} starting...");
 Console.WriteLine($"Connecting to server: {serverAddress}");
@@ -87,13 +102,14 @@ if (!args.Contains("--no-startup-task"))
         var clientExePath = Environment.ProcessPath ??
             Path.Combine(AppContext.BaseDirectory, "TorGames.Client.exe");
 
-        if (TaskSchedulerService.EnsureStartupTask(clientExePath))
+        var taskResult = TaskSchedulerService.EnsureStartupTask(clientExePath);
+        if (taskResult.Success)
         {
-            Console.WriteLine("Startup task configured successfully");
+            Console.WriteLine($"Startup task configured successfully ({taskResult.TaskType})");
         }
         else
         {
-            Console.WriteLine("Note: Could not configure startup task (non-fatal)");
+            Console.WriteLine($"Note: Could not configure startup task: {taskResult.ErrorMessage}");
         }
     }
     catch (Exception ex)

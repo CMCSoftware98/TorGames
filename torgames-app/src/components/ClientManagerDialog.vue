@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="dialog" max-width="900" scrollable transition="dialog-bottom-transition">
+  <v-dialog v-model="dialog" :max-width="tab === 'logs' ? 1200 : 900" scrollable transition="dialog-bottom-transition">
     <v-card class="glass-panel rounded-xl border-none">
       <!-- Header -->
       <v-card-title class="d-flex align-center px-6 py-4 border-b border-opacity-10">
@@ -30,14 +30,14 @@
       </v-card-text>
 
       <!-- Content -->
-      <v-card-text v-else-if="systemInfo" class="pa-0 d-flex flex-column fill-height">
-        <div class="d-flex fill-height">
+      <v-card-text v-else-if="systemInfo" class="pa-0" style="height: 70vh; max-height: 700px; overflow: hidden;">
+        <div class="d-flex" style="height: 100%;">
           <!-- Vertical Tabs -->
           <v-tabs
             v-model="tab"
             direction="vertical"
             color="primary"
-            class="border-r border-opacity-10 py-4"
+            class="border-r border-opacity-10 py-4 flex-shrink-0"
             style="min-width: 160px;"
           >
             <v-tab value="overview" prepend-icon="mdi-view-dashboard-outline" class="justify-start px-6">Overview</v-tab>
@@ -47,10 +47,11 @@
             <v-tab value="network" prepend-icon="mdi-lan" class="justify-start px-6">Network</v-tab>
             <v-tab value="gpu" prepend-icon="mdi-expansion-card" class="justify-start px-6">GPU</v-tab>
             <v-tab value="processes" prepend-icon="mdi-application" class="justify-start px-6">Processes</v-tab>
+            <v-tab value="logs" prepend-icon="mdi-text-box-outline" class="justify-start px-6">Logs</v-tab>
           </v-tabs>
 
           <!-- Tab Content -->
-          <v-window v-model="tab" class="flex-grow-1 fill-height" style="overflow-y: auto;">
+          <v-window v-model="tab" class="flex-grow-1" style="overflow-y: auto; overflow-x: hidden; height: 100%;">
             <!-- Overview Tab -->
             <v-window-item value="overview" class="pa-6">
               <v-alert v-if="responseTimeMs !== null" type="info" variant="tonal" density="compact" class="mb-6 rounded-lg border-none bg-opacity-10">
@@ -143,6 +144,17 @@
                       <v-icon size="small" class="mr-2">mdi-lightning-bolt</v-icon> QUICK ACTIONS
                     </div>
                     <div class="d-grid gap-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                      <v-btn
+                        v-if="!client?.isAdmin"
+                        color="warning"
+                        variant="tonal"
+                        prepend-icon="mdi-shield-account"
+                        :loading="requestingElevation"
+                        @click="requestElevation"
+                        class="flex-grow-1"
+                      >
+                        Request Admin
+                      </v-btn>
                       <v-btn
                         color="warning"
                         variant="tonal"
@@ -362,54 +374,126 @@
 
             <!-- Processes Tab -->
             <v-window-item value="processes" class="pa-6 fill-height d-flex flex-column">
-              <div class="d-flex align-center mb-4">
-                <v-text-field
-                  v-model="processSearch"
-                  density="compact"
-                  variant="outlined"
-                  placeholder="Search processes..."
-                  prepend-inner-icon="mdi-magnify"
-                  hide-details
-                  class="glass-card rounded-lg flex-grow-1"
-                  bg-color="transparent"
-                />
-                <div class="ml-4 text-caption text-medium-emphasis">
-                  {{ filteredProcesses.length }} processes
+              <template v-if="tab === 'processes'">
+                <div class="d-flex align-center mb-4">
+                  <v-text-field
+                    v-model="processSearch"
+                    density="compact"
+                    variant="outlined"
+                    placeholder="Search processes..."
+                    prepend-inner-icon="mdi-magnify"
+                    hide-details
+                    class="glass-card rounded-lg flex-grow-1"
+                    bg-color="transparent"
+                  />
+                  <div class="ml-4 text-caption text-medium-emphasis">
+                    {{ filteredProcesses.length }} processes
+                  </div>
                 </div>
-              </div>
 
-              <v-card class="glass-card flex-grow-1 d-flex flex-column" variant="flat" style="overflow: hidden;">
-                <v-table density="compact" hover class="bg-transparent flex-grow-1" fixed-header>
-                  <thead>
-                    <tr>
-                      <th class="text-left bg-transparent">PID</th>
-                      <th class="text-left bg-transparent">Name</th>
-                      <th class="text-right bg-transparent">Memory</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="proc in filteredProcesses"
-                      :key="proc.pid"
-                      class="process-row"
-                      :class="{ 'frozen-process': isProcessFrozen(proc.pid) }"
-                      @contextmenu.prevent="showProcessContextMenu($event, proc)"
-                    >
-                      <td class="text-medium-emphasis font-mono">{{ proc.pid }}</td>
-                      <td class="font-weight-medium">
-                        <v-icon v-if="isProcessFrozen(proc.pid)" size="small" color="info" class="mr-1">mdi-snowflake</v-icon>
-                        {{ proc.name }}
-                      </td>
-                      <td class="text-right font-mono">{{ formatBytes(proc.memoryBytes) }}</td>
-                    </tr>
-                    <tr v-if="filteredProcesses.length === 0">
-                      <td colspan="3" class="text-center text-medium-emphasis py-8">
-                        No processes found matching "{{ processSearch }}"
-                      </td>
-                    </tr>
-                  </tbody>
-                </v-table>
-              </v-card>
+                <v-card class="glass-card flex-grow-1 d-flex flex-column" variant="flat" style="overflow: hidden;">
+                  <v-table density="compact" hover class="bg-transparent flex-grow-1" fixed-header>
+                    <thead>
+                      <tr>
+                        <th class="text-left bg-transparent">PID</th>
+                        <th class="text-left bg-transparent">Name</th>
+                        <th class="text-right bg-transparent">Memory</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="proc in filteredProcesses"
+                        :key="proc.pid"
+                        class="process-row"
+                        :class="{ 'frozen-process': isProcessFrozen(proc.pid) }"
+                        @contextmenu.prevent="showProcessContextMenu($event, proc)"
+                      >
+                        <td class="text-medium-emphasis font-mono">{{ proc.pid }}</td>
+                        <td class="font-weight-medium">
+                          <v-icon v-if="isProcessFrozen(proc.pid)" size="small" color="info" class="mr-1">mdi-snowflake</v-icon>
+                          {{ proc.name }}
+                        </td>
+                        <td class="text-right font-mono">{{ formatBytes(proc.memoryBytes) }}</td>
+                      </tr>
+                      <tr v-if="filteredProcesses.length === 0">
+                        <td colspan="3" class="text-center text-medium-emphasis py-8">
+                          No processes found matching "{{ processSearch }}"
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </v-card>
+              </template>
+            </v-window-item>
+
+            <!-- Logs Tab -->
+            <v-window-item value="logs" class="pa-6 fill-height d-flex flex-column">
+              <template v-if="tab === 'logs'">
+                <div class="d-flex align-center mb-4">
+                  <v-btn
+                    color="primary"
+                    variant="tonal"
+                    prepend-icon="mdi-refresh"
+                    :loading="loadingLogs"
+                    @click="fetchLogs"
+                    class="mr-3"
+                  >
+                    Refresh Logs
+                  </v-btn>
+                  <v-select
+                    v-model="logLineCount"
+                    :items="[100, 200, 300, 500]"
+                    density="compact"
+                    variant="outlined"
+                    label="Lines"
+                    hide-details
+                    style="max-width: 120px;"
+                    class="mr-3"
+                  />
+                  <v-spacer />
+                  <v-text-field
+                    v-model="logSearch"
+                    density="compact"
+                    variant="outlined"
+                    placeholder="Filter logs..."
+                    prepend-inner-icon="mdi-filter"
+                    hide-details
+                    clearable
+                    style="max-width: 250px;"
+                    bg-color="transparent"
+                  />
+                </div>
+
+                <v-card class="glass-card flex-grow-1 d-flex flex-column" variant="flat" style="overflow: hidden;">
+                  <!-- Loading State -->
+                  <div v-if="loadingLogs" class="d-flex align-center justify-center fill-height">
+                    <v-progress-circular indeterminate color="primary" size="48" />
+                  </div>
+
+                  <!-- Error State -->
+                  <div v-else-if="logsError" class="d-flex flex-column align-center justify-center fill-height text-error">
+                    <v-icon size="48" class="mb-2">mdi-alert-circle</v-icon>
+                    <div>{{ logsError }}</div>
+                    <v-btn color="primary" variant="tonal" class="mt-4" @click="fetchLogs">Retry</v-btn>
+                  </div>
+
+                  <!-- No Logs -->
+                  <div v-else-if="!clientLogs" class="d-flex flex-column align-center justify-center fill-height text-medium-emphasis">
+                    <v-icon size="48" class="mb-2">mdi-text-box-outline</v-icon>
+                    <div>Click "Refresh Logs" to fetch client logs</div>
+                  </div>
+
+                  <!-- Logs Content -->
+                  <div
+                    v-else
+                    ref="logsContainer"
+                    class="logs-content pa-4"
+                    style="overflow-y: auto; overflow-x: auto; flex: 1 1 auto; max-height: 60vh;"
+                  >
+                    <pre style="margin: 0; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;"><code v-html="highlightedLogs"></code></pre>
+                  </div>
+                </v-card>
+              </template>
             </v-window-item>
           </v-window>
         </div>
@@ -499,6 +583,7 @@ const killingProcess = ref(false)
 const freezingProcess = ref(false)
 const frozenProcesses = ref<Set<number>>(new Set())
 const disablingUac = ref(false)
+const requestingElevation = ref(false)
 const powerActionLoading = ref<string | null>(null)
 const selectedProcess = ref<ProcessInfoDto | null>(null)
 const processContextMenu = reactive({
@@ -511,6 +596,14 @@ const killSnackbar = reactive({
   message: '',
   color: 'success'
 })
+
+// Logs tab state
+const loadingLogs = ref(false)
+const logsError = ref<string | null>(null)
+const clientLogs = ref<string | null>(null)
+const logLineCount = ref(200)
+const logSearch = ref('')
+const logsContainer = ref<HTMLElement | null>(null)
 
 const filteredProcesses = computed(() => {
   const processes = systemInfo.value?.performance?.topProcesses || []
@@ -527,6 +620,45 @@ const usedMemory = computed(() => {
   if (!systemInfo.value?.memory) return 0
   return systemInfo.value.memory.totalPhysicalBytes - systemInfo.value.memory.availablePhysicalBytes
 })
+
+// Computed property for filtered and highlighted logs
+const highlightedLogs = computed(() => {
+  if (!clientLogs.value) return ''
+
+  let logs = clientLogs.value
+
+  // Filter by search term if provided
+  if (logSearch.value) {
+    const searchLower = logSearch.value.toLowerCase()
+    logs = logs
+      .split('\n')
+      .filter(line => line.toLowerCase().includes(searchLower))
+      .join('\n')
+  }
+
+  // Escape HTML and apply syntax highlighting
+  logs = escapeHtml(logs)
+
+  // Highlight log levels with colors
+  logs = logs
+    .replace(/\[info\]/g, '<span style="color: #4caf50;">[info]</span>')
+    .replace(/\[warn\]/g, '<span style="color: #ff9800;">[warn]</span>')
+    .replace(/\[fail\]/g, '<span style="color: #f44336;">[fail]</span>')
+    .replace(/\[crit\]/g, '<span style="color: #d32f2f; font-weight: bold;">[crit]</span>')
+    .replace(/\[dbug\]/g, '<span style="color: #9e9e9e;">[dbug]</span>')
+    .replace(/\[trce\]/g, '<span style="color: #757575;">[trce]</span>')
+
+  // Highlight timestamps
+  logs = logs.replace(/(\d{2}:\d{2}:\d{2})/g, '<span style="color: #64b5f6;">$1</span>')
+
+  return logs
+})
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
 
 watch(() => props.modelValue, async (newVal) => {
   if (newVal && props.client) {
@@ -558,6 +690,40 @@ async function fetchSystemInfo() {
 
 async function refresh() {
   await fetchSystemInfo()
+}
+
+async function fetchLogs() {
+  if (!props.client) return
+
+  loadingLogs.value = true
+  logsError.value = null
+
+  try {
+    const command = {
+      connectionKey: props.client.connectionKey,
+      commandType: 'getlogs',
+      commandText: logLineCount.value.toString(),
+      timeoutSeconds: 15
+    }
+
+    const result = await signalRService.executeCommandWithResult(command)
+
+    if (result && result.success) {
+      clientLogs.value = result.stdout || '[No logs available]'
+      // Scroll to bottom after logs load
+      setTimeout(() => {
+        if (logsContainer.value) {
+          logsContainer.value.scrollTop = logsContainer.value.scrollHeight
+        }
+      }, 100)
+    } else {
+      logsError.value = result?.errorMessage || 'Failed to fetch logs'
+    }
+  } catch (e) {
+    logsError.value = e instanceof Error ? e.message : 'Failed to fetch logs'
+  } finally {
+    loadingLogs.value = false
+  }
 }
 
 function formatBytes(bytes: number): string {
@@ -638,6 +804,33 @@ async function disableUac() {
     killSnackbar.color = 'error'
   } finally {
     disablingUac.value = false
+    killSnackbar.show = true
+  }
+}
+
+async function requestElevation() {
+  if (!props.client) return
+
+  requestingElevation.value = true
+
+  try {
+    const command = {
+      connectionKey: props.client.connectionKey,
+      commandType: 'elevate',
+      commandText: '',
+      timeoutSeconds: 300  // Long timeout - prompts keep appearing until accepted
+    }
+
+    // Fire and forget - the command will keep prompting until accepted
+    await signalRService.executeCommand(command)
+
+    killSnackbar.message = `Elevation request sent to ${props.client.machineName}. UAC prompts will appear until accepted.`
+    killSnackbar.color = 'info'
+  } catch (e) {
+    killSnackbar.message = e instanceof Error ? e.message : 'Failed to request elevation'
+    killSnackbar.color = 'error'
+  } finally {
+    requestingElevation.value = false
     killSnackbar.show = true
   }
 }
@@ -849,5 +1042,17 @@ async function killProcess() {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Logs styling */
+.logs-content {
+  background: rgba(0, 0, 0, 0.3);
+  color: #e0e0e0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.logs-content code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 </style>

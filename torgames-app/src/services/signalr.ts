@@ -268,6 +268,65 @@ class SignalRService {
     return await this.connection.invoke<boolean>('ExecuteCommand', request)
   }
 
+  /**
+   * Executes a command and waits for the result
+   */
+  async executeCommandWithResult(request: ExecuteCommandRequest): Promise<CommandResultDto | null> {
+    if (!this.connection) throw new Error('Not connected')
+
+    return new Promise((resolve) => {
+      const commandId = crypto.randomUUID()
+      const timeout = (request.timeoutSeconds || 30) * 1000
+
+      // Create timeout
+      const timeoutId = setTimeout(() => {
+        cleanup()
+        resolve({
+          commandId,
+          connectionKey: request.connectionKey,
+          success: false,
+          exitCode: -1,
+          stdout: '',
+          stderr: '',
+          errorMessage: 'Command timed out'
+        })
+      }, timeout)
+
+      // Handler to listen for result
+      const resultHandler = (result: CommandResultDto) => {
+        if (result.connectionKey === request.connectionKey) {
+          cleanup()
+          resolve(result)
+        }
+      }
+
+      const cleanup = () => {
+        clearTimeout(timeoutId)
+        const index = this.commandResultHandlers.indexOf(resultHandler)
+        if (index > -1) {
+          this.commandResultHandlers.splice(index, 1)
+        }
+      }
+
+      // Add handler
+      this.commandResultHandlers.push(resultHandler)
+
+      // Send command
+      this.connection!.invoke<boolean>('ExecuteCommand', request).catch((err) => {
+        cleanup()
+        resolve({
+          commandId,
+          connectionKey: request.connectionKey,
+          success: false,
+          exitCode: -1,
+          stdout: '',
+          stderr: '',
+          errorMessage: err.message || 'Failed to execute command'
+        })
+      })
+    })
+  }
+
   async broadcastCommand(clientType: string, request: ExecuteCommandRequest): Promise<number> {
     if (!this.connection) throw new Error('Not connected')
     return await this.connection.invoke<number>('BroadcastCommand', clientType, request)

