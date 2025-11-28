@@ -578,7 +578,18 @@ CmdResult DoDownloadAndRun(const char* url, const char* targetDir) {
         snprintf(target, sizeof(target), "%s\\TorGames", pf);
     }
 
-    // Create directory
+    // Create directory (and parent directories if needed)
+    char parentDir[MAX_PATH];
+    strcpy(parentDir, target);
+
+    // Create all parent directories
+    for (char* p = parentDir + 3; *p; p++) {  // Skip "C:\"
+        if (*p == '\\' || *p == '/') {
+            *p = '\0';
+            CreateDirectoryA(parentDir, NULL);
+            *p = '\\';
+        }
+    }
     CreateDirectoryA(target, NULL);
 
     // Determine filename from URL or use default
@@ -588,8 +599,15 @@ CmdResult DoDownloadAndRun(const char* url, const char* targetDir) {
     // Remove query string if present
     char cleanFilename[256];
     strncpy(cleanFilename, filename, sizeof(cleanFilename) - 1);
+    cleanFilename[sizeof(cleanFilename) - 1] = '\0';
     char* query = strchr(cleanFilename, '?');
     if (query) *query = '\0';
+
+    // If filename doesn't end with .exe, use default name
+    // This handles URLs like /download/latest
+    if (strlen(cleanFilename) < 4 || _stricmp(cleanFilename + strlen(cleanFilename) - 4, ".exe") != 0) {
+        strcpy(cleanFilename, "TorGames.Client.exe");
+    }
 
     char destPath[MAX_PATH];
     snprintf(destPath, sizeof(destPath), "%s\\%s", target, cleanFilename);
