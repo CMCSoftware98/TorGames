@@ -15,7 +15,21 @@ const uploadDialog = ref(false)
 const uploadLoading = ref(false)
 const selectedFile = ref<File | null>(null)
 const releaseNotes = ref('')
+const versionNumber = ref('')
 const uploadError = ref<string | null>(null)
+
+function generateNextVersion(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  const day = now.getDate()
+  // Use HHMM as build number - unique per minute, always increases throughout the day
+  const hours = now.getHours()
+  const minutes = now.getMinutes()
+  const build = hours * 100 + minutes
+
+  return `${year}.${month}.${day}.${build}`
+}
 
 // Delete dialog
 const deleteDialog = ref(false)
@@ -55,7 +69,7 @@ async function loadVersions() {
   error.value = null
 
   try {
-    const token = authStore.token
+    const token = authStore.sessionToken
     if (!token) {
       error.value = 'Not authenticated'
       return
@@ -72,14 +86,16 @@ async function loadVersions() {
 function openUploadDialog() {
   selectedFile.value = null
   releaseNotes.value = ''
+  versionNumber.value = generateNextVersion()
   uploadError.value = null
   uploadDialog.value = true
 }
 
 function onFileSelected(event: Event) {
   const input = event.target as HTMLInputElement
-  if (input.files && input.files.length > 0) {
-    selectedFile.value = input.files[0]
+  const file = input.files?.[0]
+  if (file) {
+    selectedFile.value = file
   }
 }
 
@@ -93,13 +109,13 @@ async function handleUpload() {
   uploadError.value = null
 
   try {
-    const token = authStore.token
+    const token = authStore.sessionToken
     if (!token) {
       uploadError.value = 'Not authenticated'
       return
     }
 
-    const result = await uploadVersion(token, selectedFile.value, releaseNotes.value)
+    const result = await uploadVersion(token, selectedFile.value, releaseNotes.value, versionNumber.value)
 
     if (result.success) {
       uploadDialog.value = false
@@ -130,7 +146,7 @@ async function handleDelete() {
   deleteLoading.value = true
 
   try {
-    const token = authStore.token
+    const token = authStore.sessionToken
     if (!token) {
       snackbar.value = {
         show: true,
@@ -307,6 +323,19 @@ onMounted(() => {
             {{ uploadError }}
           </v-alert>
 
+          <v-text-field
+            v-model="versionNumber"
+            label="Version"
+            placeholder="YYYY.MM.DD.BUILD"
+            prepend-icon="mdi-tag"
+            variant="outlined"
+            density="compact"
+            :disabled="uploadLoading"
+            hint="Auto-generated based on current date/time"
+            persistent-hint
+            class="mb-2"
+          />
+
           <v-file-input
             label="Client Executable"
             accept=".exe"
@@ -329,8 +358,8 @@ onMounted(() => {
 
           <v-alert type="info" density="compact" variant="tonal" class="mt-2">
             <template #text>
-              The version number will be automatically extracted from the executable's metadata.
-              Make sure the file was built with a valid version (e.g., 2025.11.28.1).
+              Version is auto-generated using format YYYY.MM.DD.HHMM (e.g., 2025.11.28.1430).
+              Each upload must have a higher version than existing ones.
             </template>
           </v-alert>
         </v-card-text>
