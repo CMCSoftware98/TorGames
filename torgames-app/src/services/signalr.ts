@@ -1,7 +1,7 @@
 import * as signalR from '@microsoft/signalr'
 import type { ClientDto, CommandResultDto, ExecuteCommandRequest, ConnectionStats, DetailedSystemInfoDto } from '@/types/client'
 
-const HUB_URL = 'http://localhost:5001/hubs/clients'
+const HUB_URL = 'http://144.91.111.101:5001/hubs/clients'
 const RECONNECT_INTERVAL_MS = 10000 // 10 seconds
 
 export type ClientEventHandler = (client: ClientDto) => void

@@ -96,10 +96,12 @@ builder.Services.AddCors(options =>
     options.AddPolicy("TauriApp", policy =>
     {
         policy.WithOrigins(
-                "http://localhost:5173",  // Vite dev server
-                "tauri://localhost",       // Tauri app
-                "https://tauri.localhost"  // Tauri app (HTTPS)
+                "http://localhost:5173",    // Vite dev server
+                "tauri://localhost",        // Tauri app
+                "https://tauri.localhost",  // Tauri app (HTTPS)
+                "http://144.91.111.101:5173" // Remote dev server
             )
+            .SetIsOriginAllowed(_ => true)  // Allow any origin for now
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
