@@ -85,11 +85,21 @@ public class TorServiceImpl : TorService.TorServiceBase
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Client connection cancelled: {ConnectionKey}", connectionKey);
+            _logger.LogDebug("Client connection cancelled: {ConnectionKey}", connectionKey);
+        }
+        catch (IOException ex) when (IsConnectionAbortException(ex))
+        {
+            // Client disconnected abruptly (network issue, crash, etc.) - this is normal
+            _logger.LogDebug("Client connection aborted: {ConnectionKey}", connectionKey);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
+        {
+            _logger.LogDebug("Client RPC cancelled: {ConnectionKey}", connectionKey);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling client connection: {ConnectionKey}", connectionKey);
+            // Only log unexpected errors
+            _logger.LogWarning(ex, "Unexpected error handling client connection: {ConnectionKey}", connectionKey);
         }
         finally
         {
