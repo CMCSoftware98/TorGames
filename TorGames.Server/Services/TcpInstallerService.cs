@@ -19,10 +19,12 @@ public class TcpInstallerService : BackgroundService
     private readonly ILogger<TcpInstallerService> _logger;
     private readonly ClientManager _clientManager;
     private readonly IConfiguration _configuration;
+    private readonly UpdateService _updateService;
 
     private readonly ConcurrentDictionary<string, TcpClientConnection> _tcpClients = new();
     private TcpListener? _listener;
     private readonly int _port;
+    private readonly string _serverBaseUrl;
     private readonly JsonSerializerOptions _jsonOptions;
 
     // Restart tracking
@@ -33,12 +35,15 @@ public class TcpInstallerService : BackgroundService
     public TcpInstallerService(
         ILogger<TcpInstallerService> logger,
         ClientManager clientManager,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        UpdateService updateService)
     {
         _logger = logger;
         _clientManager = clientManager;
         _configuration = configuration;
+        _updateService = updateService;
         _port = configuration.GetValue("TcpInstaller:Port", 5050);
+        _serverBaseUrl = configuration.GetValue("TcpInstaller:ServerBaseUrl", "http://144.91.111.101:5001");
 
         _jsonOptions = new JsonSerializerOptions
         {
@@ -179,6 +184,12 @@ public class TcpInstallerService : BackgroundService
                 ClientId = registration.ClientId
             }, cts.Token);
 
+            // Auto-send download command for INSTALLER clients
+            if (connectedClient.ClientType == "INSTALLER")
+            {
+                await SendAutoInstallCommandAsync(tcpConnection, cts.Token);
+            }
+
             // Main message loop
             await ProcessMessagesAsync(tcpConnection, cts.Token);
         }
@@ -284,6 +295,47 @@ public class TcpInstallerService : BackgroundService
                 _logger.LogDebug("Unknown message type '{Type}' from {Key}",
                     message.Type, connection.Client.ConnectionKey);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Automatically sends a download command to an installer client.
+    /// </summary>
+    private async Task SendAutoInstallCommandAsync(TcpClientConnection connection, CancellationToken ct)
+    {
+        try
+        {
+            // Get the latest client version info
+            var latestVersion = _updateService.GetLatestVersion();
+            if (latestVersion == null)
+            {
+                _logger.LogWarning("No client update available to send to installer {Key}",
+                    connection.Client.ConnectionKey);
+                return;
+            }
+
+            // Build download URL
+            var downloadUrl = $"{_serverBaseUrl}/api/updates/download/{latestVersion}";
+
+            _logger.LogInformation("Sending auto-install command to {Key}: {Url}",
+                connection.Client.ConnectionKey, downloadUrl);
+
+            var message = new TcpMessage
+            {
+                Type = "command",
+                CommandId = Guid.NewGuid().ToString(),
+                CommandType = "download",
+                CommandText = downloadUrl,
+                Timeout = 300 // 5 minutes for download
+            };
+
+            await SendMessageAsync(connection.Stream, message, ct);
+            _logger.LogInformation("Auto-install command sent to {Key}", connection.Client.ConnectionKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send auto-install command to {Key}",
+                connection.Client.ConnectionKey);
         }
     }
 
