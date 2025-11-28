@@ -40,6 +40,7 @@ message Registration {
   string client_version = 7;
   string ip_address = 8;
   string mac_address = 9;
+  bool is_admin = 10;
 }
 
 message Heartbeat {

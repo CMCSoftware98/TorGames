@@ -51,7 +51,7 @@ interface DisplayClient {
   ipAddress: string
   machineName: string
   operatingSystem: string
-  account: string
+  isAdmin: boolean
   cpus: number
   type: string
   firstSeen: string
@@ -91,7 +91,7 @@ const transformClient = (client: ClientDto): DisplayClient => {
     ipAddress: client.ipAddress,
     machineName: client.machineName,
     operatingSystem: `${client.osVersion} ${client.osArchitecture}`,
-    account: client.username,
+    isAdmin: client.isAdmin,
     cpus: client.cpuCount,
     type: client.clientType,
     firstSeen: formatDuration(now.getTime() - connectedDate.getTime()),
@@ -122,7 +122,7 @@ const headers = [
   { title: 'IP Address', key: 'ipAddress', sortable: true },
   { title: 'Machine Name', key: 'machineName', sortable: true },
   { title: 'Operating System', key: 'operatingSystem', sortable: true },
-  { title: 'Account', key: 'account', sortable: true, width: '80px' },
+  { title: 'Admin', key: 'isAdmin', sortable: true, width: '70px' },
   { title: 'CPUs', key: 'cpus', sortable: true, width: '60px' },
   { title: 'Type', key: 'type', sortable: true, width: '90px' },
   { title: 'First Seen', key: 'firstSeen', sortable: true },
@@ -448,6 +448,15 @@ onUnmounted(async () => {
                 </v-icon>
                 {{ item.clientId }}
               </div>
+            </template>
+
+            <template #item.isAdmin="{ item }">
+              <v-icon
+                :color="item.isAdmin ? 'success' : 'error'"
+                size="small"
+              >
+                {{ item.isAdmin ? 'mdi-check' : 'mdi-close' }}
+              </v-icon>
             </template>
 
             <template #item.type="{ item }">

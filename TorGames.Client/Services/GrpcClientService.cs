@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Security.Principal;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Configuration;
@@ -124,7 +125,8 @@ public class GrpcClientService : BackgroundService
             Username = Environment.UserName,
             ClientVersion = "1.0.0",
             IpAddress = GetLocalIpAddress(),
-            MacAddress = GetPrimaryMacAddress()
+            MacAddress = GetPrimaryMacAddress(),
+            IsAdmin = IsRunningAsAdmin()
         };
 
         var message = new ClientMessage
@@ -509,5 +511,19 @@ public class GrpcClientService : BackgroundService
         }
         catch { }
         return "000000000000";
+    }
+
+    private static bool IsRunningAsAdmin()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            var principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

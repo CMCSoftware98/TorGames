@@ -22,6 +22,7 @@ public class ConnectedClient
     public string ClientVersion { get; set; } = string.Empty;
     public string IpAddress { get; set; } = string.Empty;
     public string MacAddress { get; set; } = string.Empty;
+    public bool IsAdmin { get; set; }
 
     // Connection state
     public DateTime ConnectedAt { get; init; } = DateTime.UtcNow;
@@ -59,6 +60,7 @@ public class ConnectedClient
         ClientVersion = registration.ClientVersion;
         IpAddress = registration.IpAddress;
         MacAddress = registration.MacAddress;
+        IsAdmin = registration.IsAdmin;
         LastHeartbeat = DateTime.UtcNow;
     }
 

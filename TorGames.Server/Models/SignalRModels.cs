@@ -17,6 +17,7 @@ public class ClientDto
     public string ClientVersion { get; set; } = string.Empty;
     public string IpAddress { get; set; } = string.Empty;
     public string MacAddress { get; set; } = string.Empty;
+    public bool IsAdmin { get; set; }
     public DateTime ConnectedAt { get; set; }
     public DateTime LastHeartbeat { get; set; }
     public bool IsOnline { get; set; }
@@ -40,6 +41,7 @@ public class ClientDto
             ClientVersion = client.ClientVersion,
             IpAddress = client.IpAddress,
             MacAddress = client.MacAddress,
+            IsAdmin = client.IsAdmin,
             ConnectedAt = client.ConnectedAt,
             LastHeartbeat = client.LastHeartbeat,
             IsOnline = client.IsOnline,
