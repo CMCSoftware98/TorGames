@@ -6,6 +6,7 @@ import { useClientsStore } from '@/stores/clients'
 import { useSettingsStore } from '@/stores/settings'
 import { signalRService } from '@/services/signalr'
 import ClientManagerDialog from '@/components/ClientManagerDialog.vue'
+import VersionManagement from '@/components/VersionManagement.vue'
 import type { ClientDto } from '@/types/client'
 
 const router = useRouter()
@@ -508,14 +509,8 @@ onUnmounted(async () => {
           </v-card>
         </v-window-item>
 
-        <v-window-item value="server" class="fill-height pa-4">
-          <v-card class="fill-height d-flex align-center justify-center">
-            <v-card-text class="text-center">
-              <v-icon size="64" color="grey">mdi-server</v-icon>
-              <div class="text-h6 mt-4 text-grey">Server Management</div>
-              <div class="text-body-2 text-grey">Coming soon...</div>
-            </v-card-text>
-          </v-card>
+        <v-window-item value="server" class="fill-height">
+          <VersionManagement />
         </v-window-item>
       </v-window>
 

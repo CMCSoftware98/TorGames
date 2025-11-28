@@ -39,6 +39,9 @@ builder.Services.AddHostedService<ClientCleanupService>();
 // Add JWT Service
 builder.Services.AddSingleton<JwtService>();
 
+// Add Update Service
+builder.Services.AddSingleton<UpdateService>();
+
 // Add SignalR
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<SignalRBroadcastService>();

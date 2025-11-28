@@ -32,6 +32,29 @@
         <EventSourceSupport>false</EventSourceSupport>
     </PropertyGroup>
 
+    <!-- Auto-generate version from server or use date-based fallback -->
+    <Target Name="SetVersionFromServer" BeforeTargets="GenerateAssemblyInfo" Condition="'$(Version)' == ''">
+        <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\scripts\get-next-version.ps1&quot; -ServerUrl &quot;http://144.91.111.101:5001&quot;"
+              ConsoleToMSBuild="true"
+              StandardOutputImportance="high"
+              ContinueOnError="true">
+            <Output TaskParameter="ConsoleOutput" PropertyName="GeneratedVersion" />
+        </Exec>
+        <PropertyGroup Condition="'$(GeneratedVersion)' != ''">
+            <Version>$(GeneratedVersion)</Version>
+            <AssemblyVersion>$(GeneratedVersion)</AssemblyVersion>
+            <FileVersion>$(GeneratedVersion)</FileVersion>
+            <InformationalVersion>$(GeneratedVersion)</InformationalVersion>
+        </PropertyGroup>
+        <!-- Fallback if script fails -->
+        <PropertyGroup Condition="'$(GeneratedVersion)' == ''">
+            <Version>$([System.DateTime]::Now.ToString("yyyy.MM.dd")).1</Version>
+            <AssemblyVersion>$([System.DateTime]::Now.ToString("yyyy.MM.dd")).1</AssemblyVersion>
+            <FileVersion>$([System.DateTime]::Now.ToString("yyyy.MM.dd")).1</FileVersion>
+            <InformationalVersion>$([System.DateTime]::Now.ToString("yyyy.MM.dd")).1</InformationalVersion>
+        </PropertyGroup>
+    </Target>
+
     <ItemGroup>
         <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
