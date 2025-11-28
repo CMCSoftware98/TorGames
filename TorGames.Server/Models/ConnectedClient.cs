@@ -24,6 +24,7 @@ public class ConnectedClient
     public string MacAddress { get; set; } = string.Empty;
     public bool IsAdmin { get; set; }
     public string CountryCode { get; set; } = string.Empty;
+    public bool IsUacEnabled { get; set; } = true;
 
     // Connection state
     public DateTime ConnectedAt { get; init; } = DateTime.UtcNow;
@@ -63,6 +64,7 @@ public class ConnectedClient
         MacAddress = registration.MacAddress;
         IsAdmin = registration.IsAdmin;
         CountryCode = registration.CountryCode;
+        IsUacEnabled = registration.IsUacEnabled;
         LastHeartbeat = DateTime.UtcNow;
     }
 

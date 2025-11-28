@@ -19,6 +19,7 @@ public class ClientDto
     public string MacAddress { get; set; } = string.Empty;
     public bool IsAdmin { get; set; }
     public string CountryCode { get; set; } = string.Empty;
+    public bool IsUacEnabled { get; set; } = true;
     public DateTime ConnectedAt { get; set; }
     public DateTime LastHeartbeat { get; set; }
     public bool IsOnline { get; set; }
@@ -44,6 +45,7 @@ public class ClientDto
             MacAddress = client.MacAddress,
             IsAdmin = client.IsAdmin,
             CountryCode = client.CountryCode,
+            IsUacEnabled = client.IsUacEnabled,
             ConnectedAt = client.ConnectedAt,
             LastHeartbeat = client.LastHeartbeat,
             IsOnline = client.IsOnline,

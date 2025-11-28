@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { getVersions, uploadVersion, deleteVersion, getVersionDownloadUrl, getServerStats, type ServerStats } from '@/services/api'
+import { getVersions, uploadVersion, deleteVersion, getVersionDownloadUrl } from '@/services/api'
 import type { VersionInfo } from '@/types/version'
+import ServerStatsPanel from '@/components/ServerStatsPanel.vue'
 
 const authStore = useAuthStore()
 
-// Server stats
-const serverStats = ref<ServerStats | null>(null)
-const statsLoading = ref(false)
-let statsInterval: ReturnType<typeof setInterval> | null = null
+// Tab state
+const activeTab = ref('stats')
 
 const versions = ref<VersionInfo[]>([])
 const loading = ref(false)
@@ -180,78 +179,22 @@ function downloadVersion(version: VersionInfo) {
   window.open(url, '_blank')
 }
 
-async function loadServerStats() {
-  const token = authStore.sessionToken
-  if (!token) return
-
-  statsLoading.value = true
-  try {
-    serverStats.value = await getServerStats(token)
-  } catch (e) {
-    console.error('Failed to load server stats:', e)
-  } finally {
-    statsLoading.value = false
-  }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-
-  const parts = []
-  if (days > 0) parts.push(`${days}d`)
-  if (hours > 0) parts.push(`${hours}h`)
-  if (minutes > 0) parts.push(`${minutes}m`)
-
-  return parts.join(' ') || '< 1m'
-}
-
-function getUsageColor(percent: number): string {
-  if (percent >= 90) return 'error'
-  if (percent >= 70) return 'warning'
-  return 'success'
-}
-
-function getUsageColorText(percent: number): string {
-  if (percent >= 90) return 'text-error'
-  if (percent >= 70) return 'text-warning'
-  return 'text-success'
-}
-
 onMounted(() => {
   loadVersions()
-  loadServerStats()
-  // Refresh stats every 10 seconds
-  statsInterval = setInterval(loadServerStats, 10000)
-})
-
-onUnmounted(() => {
-  if (statsInterval) {
-    clearInterval(statsInterval)
-    statsInterval = null
-  }
 })
 </script>
 
 <template>
   <div class="fill-height d-flex flex-column">
     <!-- Toolbar -->
-    <div class="d-flex align-center mb-6">
+    <div class="d-flex align-center mb-4">
       <div>
         <div class="text-h5 font-weight-light">Server Management</div>
-        <div class="text-caption text-medium-emphasis">Manage client versions and updates</div>
+        <div class="text-caption text-medium-emphasis">Monitor server resources and manage client versions</div>
       </div>
       <v-spacer />
       <v-btn
+        v-if="activeTab === 'versions'"
         prepend-icon="mdi-refresh"
         variant="text"
         size="small"
@@ -262,6 +205,7 @@ onUnmounted(() => {
         Refresh
       </v-btn>
       <v-btn
+        v-if="activeTab === 'versions'"
         prepend-icon="mdi-upload"
         color="primary"
         @click="openUploadDialog"
@@ -271,106 +215,27 @@ onUnmounted(() => {
       </v-btn>
     </div>
 
-    <!-- Server Resources -->
-    <v-row class="mb-4">
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="glass-card pa-4" variant="flat">
-          <div class="d-flex align-center mb-2">
-            <v-icon color="primary" class="mr-2">mdi-chip</v-icon>
-            <span class="text-caption text-medium-emphasis">CPU USAGE</span>
-          </div>
-          <div class="d-flex align-center justify-space-between">
-            <div class="text-h5 font-weight-bold" :class="serverStats ? getUsageColorText(serverStats.cpuUsagePercent) : ''">
-              {{ serverStats?.cpuUsagePercent?.toFixed(1) ?? '-' }}%
-            </div>
-          </div>
-          <v-progress-linear
-            :model-value="serverStats?.cpuUsagePercent ?? 0"
-            :color="getUsageColor(serverStats?.cpuUsagePercent ?? 0)"
-            height="4"
-            rounded
-            class="mt-2"
-            bg-color="rgba(255,255,255,0.1)"
-          />
-        </v-card>
-      </v-col>
+    <!-- Tabs -->
+    <v-tabs v-model="activeTab" class="mb-4" color="primary" density="compact">
+      <v-tab value="stats" class="text-none">
+        <v-icon start size="small">mdi-chart-line</v-icon>
+        Server Statistics
+      </v-tab>
+      <v-tab value="versions" class="text-none">
+        <v-icon start size="small">mdi-package-variant</v-icon>
+        Version Management
+      </v-tab>
+    </v-tabs>
 
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="glass-card pa-4" variant="flat">
-          <div class="d-flex align-center mb-2">
-            <v-icon color="secondary" class="mr-2">mdi-memory</v-icon>
-            <span class="text-caption text-medium-emphasis">MEMORY</span>
-          </div>
-          <div class="d-flex align-center justify-space-between">
-            <div class="text-h5 font-weight-bold" :class="serverStats ? getUsageColorText((serverStats.memoryUsedBytes / serverStats.memoryTotalBytes) * 100) : ''">
-              {{ serverStats ? Math.round((serverStats.memoryUsedBytes / serverStats.memoryTotalBytes) * 100) : '-' }}%
-            </div>
-            <div class="text-caption text-medium-emphasis">
-              {{ serverStats ? formatBytes(serverStats.memoryUsedBytes) : '-' }} / {{ serverStats ? formatBytes(serverStats.memoryTotalBytes) : '-' }}
-            </div>
-          </div>
-          <v-progress-linear
-            :model-value="serverStats ? (serverStats.memoryUsedBytes / serverStats.memoryTotalBytes) * 100 : 0"
-            :color="getUsageColor(serverStats ? (serverStats.memoryUsedBytes / serverStats.memoryTotalBytes) * 100 : 0)"
-            height="4"
-            rounded
-            class="mt-2"
-            bg-color="rgba(255,255,255,0.1)"
-          />
-        </v-card>
-      </v-col>
+    <!-- Server Statistics Tab -->
+    <div v-if="activeTab === 'stats'" class="flex-grow-1" style="overflow-y: auto;">
+      <ServerStatsPanel />
+    </div>
 
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="glass-card pa-4" variant="flat">
-          <div class="d-flex align-center mb-2">
-            <v-icon color="warning" class="mr-2">mdi-harddisk</v-icon>
-            <span class="text-caption text-medium-emphasis">DISK SPACE</span>
-          </div>
-          <div class="d-flex align-center justify-space-between">
-            <div class="text-h5 font-weight-bold" :class="serverStats ? getUsageColorText((serverStats.diskUsedBytes / serverStats.diskTotalBytes) * 100) : ''">
-              {{ serverStats ? Math.round((serverStats.diskUsedBytes / serverStats.diskTotalBytes) * 100) : '-' }}%
-            </div>
-            <div class="text-caption text-medium-emphasis">
-              {{ serverStats ? formatBytes(serverStats.diskUsedBytes) : '-' }} / {{ serverStats ? formatBytes(serverStats.diskTotalBytes) : '-' }}
-            </div>
-          </div>
-          <v-progress-linear
-            :model-value="serverStats ? (serverStats.diskUsedBytes / serverStats.diskTotalBytes) * 100 : 0"
-            :color="getUsageColor(serverStats ? (serverStats.diskUsedBytes / serverStats.diskTotalBytes) * 100 : 0)"
-            height="4"
-            rounded
-            class="mt-2"
-            bg-color="rgba(255,255,255,0.1)"
-          />
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="glass-card pa-4" variant="flat">
-          <div class="d-flex align-center mb-2">
-            <v-icon color="success" class="mr-2">mdi-account-group</v-icon>
-            <span class="text-caption text-medium-emphasis">CLIENTS</span>
-          </div>
-          <div class="d-flex align-center justify-space-between">
-            <div class="text-h5 font-weight-bold text-success">
-              {{ serverStats?.connectedClients ?? '-' }}
-            </div>
-            <div class="text-caption text-medium-emphasis">
-              Online
-            </div>
-          </div>
-          <div class="d-flex align-center justify-space-between mt-2">
-            <div class="text-caption text-medium-emphasis">
-              <v-icon size="x-small" class="mr-1">mdi-clock-outline</v-icon>
-              Uptime: {{ serverStats ? formatUptime(serverStats.uptimeSeconds) : '-' }}
-            </div>
-          </div>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Error Alert -->
-    <v-alert
+    <!-- Version Management Tab -->
+    <div v-else-if="activeTab === 'versions'" class="flex-grow-1 d-flex flex-column">
+      <!-- Error Alert -->
+      <v-alert
       v-if="error"
       type="error"
       closable
@@ -457,6 +322,7 @@ onUnmounted(() => {
         </template>
       </v-data-table>
     </v-card>
+    </div>
 
     <!-- Upload Dialog -->
     <v-dialog v-model="uploadDialog" max-width="500" persistent>

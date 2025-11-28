@@ -8,6 +8,7 @@ import { signalRService } from '@/services/signalr'
 import { getVersions } from '@/services/api'
 import MainLayout from '@/layouts/MainLayout.vue'
 import ClientManagerDialog from '@/components/ClientManagerDialog.vue'
+import FileExplorerDialog from '@/components/FileExplorerDialog.vue'
 import VersionManagement from '@/components/VersionManagement.vue'
 import type { ClientDto } from '@/types/client'
 import type { VersionInfo } from '@/types/version'
@@ -27,6 +28,10 @@ const contextMenuClient = ref<ClientDto | null>(null)
 // Client Manager dialog state
 const clientManagerDialog = ref(false)
 const clientManagerClient = ref<ClientDto | null>(null)
+
+// File Explorer dialog state
+const fileExplorerDialog = ref(false)
+const fileExplorerClient = ref<ClientDto | null>(null)
 
 // Selection state
 const selectedClients = ref<ClientDto[]>([])
@@ -193,6 +198,14 @@ function openClientManager() {
   if (contextMenuClient.value) {
     clientManagerClient.value = contextMenuClient.value
     clientManagerDialog.value = true
+    contextMenu.value = false
+  }
+}
+
+function openFileExplorer() {
+  if (contextMenuClient.value) {
+    fileExplorerClient.value = contextMenuClient.value
+    fileExplorerDialog.value = true
     contextMenu.value = false
   }
 }
@@ -473,7 +486,8 @@ onUnmounted(async () => {
         <v-divider class="mb-2 border-opacity-25"></v-divider>
         
         <v-list-item prepend-icon="mdi-monitor-dashboard" title="Client Manager" @click="openClientManager" />
-        <v-list-item prepend-icon="mdi-shield-off" title="Disable UAC" @click="disableUac" />
+        <v-list-item prepend-icon="mdi-folder-open" title="File Explorer" @click="openFileExplorer" />
+        <v-list-item v-if="contextMenuClient?.isUacEnabled" prepend-icon="mdi-shield-off" title="Disable UAC" @click="disableUac" />
         <v-list-item
           prepend-icon="mdi-update"
           title="Manual Update"
@@ -492,6 +506,13 @@ onUnmounted(async () => {
     <ClientManagerDialog
       v-model="clientManagerDialog"
       :client="clientManagerClient"
+    />
+
+    <!-- File Explorer Dialog -->
+    <FileExplorerDialog
+      v-model="fileExplorerDialog"
+      :client="fileExplorerClient"
+      :connection-key="fileExplorerClient?.connectionKey"
     />
 
     <!-- Snackbar -->

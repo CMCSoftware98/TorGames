@@ -158,6 +158,8 @@ export interface ServerStats {
   memoryTotalBytes: number
   diskUsedBytes: number
   diskTotalBytes: number
+  networkBytesInPerSec: number
+  networkBytesOutPerSec: number
   connectedClients: number
   totalClients: number
   uptimeSeconds: number

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TorGames.Server.Services;
@@ -20,6 +21,13 @@ public class ServerStatsController : ControllerBase
     private static TimeSpan _lastTotalProcessorTime = TimeSpan.Zero;
     private static double _lastCpuUsage = 0;
 
+    // Network I/O tracking
+    private static DateTime _lastNetworkCheck = DateTime.UtcNow;
+    private static long _lastBytesReceived = 0;
+    private static long _lastBytesSent = 0;
+    private static long _networkBytesInPerSec = 0;
+    private static long _networkBytesOutPerSec = 0;
+
     public ServerStatsController(
         ClientManager clientManager,
         ILogger<ServerStatsController> logger)
@@ -29,13 +37,16 @@ public class ServerStatsController : ControllerBase
     }
 
     /// <summary>
-    /// Gets current server statistics including CPU, RAM, disk usage, and connected clients.
+    /// Gets current server statistics including CPU, RAM, disk usage, network I/O, and connected clients.
     /// </summary>
     [HttpGet]
     public ActionResult<ServerStatsDto> GetStats()
     {
         try
         {
+            // Update network stats
+            UpdateNetworkStats();
+
             var stats = new ServerStatsDto
             {
                 CpuUsagePercent = GetCpuUsage(),
@@ -43,6 +54,8 @@ public class ServerStatsController : ControllerBase
                 MemoryTotalBytes = GetTotalMemory(),
                 DiskUsedBytes = GetDiskUsed(),
                 DiskTotalBytes = GetDiskTotal(),
+                NetworkBytesInPerSec = _networkBytesInPerSec,
+                NetworkBytesOutPerSec = _networkBytesOutPerSec,
                 ConnectedClients = _clientManager.GetAllClients().Count(c => c.IsOnline),
                 TotalClients = _clientManager.GetAllClients().Count(),
                 UptimeSeconds = (long)(DateTime.UtcNow - CurrentProcess.StartTime.ToUniversalTime()).TotalSeconds,
@@ -193,6 +206,64 @@ public class ServerStatsController : ControllerBase
                ?? drives.FirstOrDefault()
                ?? new DriveInfo("/");
     }
+
+    private static void UpdateNetworkStats()
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var timeDiffSeconds = (now - _lastNetworkCheck).TotalSeconds;
+
+            if (timeDiffSeconds < 0.1) return; // Avoid division by zero or too frequent updates
+
+            // Get all network interfaces and sum their statistics
+            var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(ni => ni.OperationalStatus == OperationalStatus.Up &&
+                             ni.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .ToList();
+
+            long totalBytesReceived = 0;
+            long totalBytesSent = 0;
+
+            foreach (var ni in interfaces)
+            {
+                try
+                {
+                    var stats = ni.GetIPv4Statistics();
+                    totalBytesReceived += stats.BytesReceived;
+                    totalBytesSent += stats.BytesSent;
+                }
+                catch
+                {
+                    // Some interfaces may not support IPv4 statistics
+                }
+            }
+
+            // Calculate bytes per second
+            if (_lastBytesReceived > 0 && _lastBytesSent > 0)
+            {
+                var bytesReceivedDiff = totalBytesReceived - _lastBytesReceived;
+                var bytesSentDiff = totalBytesSent - _lastBytesSent;
+
+                // Only update if positive (handles counter resets)
+                if (bytesReceivedDiff >= 0 && bytesSentDiff >= 0)
+                {
+                    _networkBytesInPerSec = (long)(bytesReceivedDiff / timeDiffSeconds);
+                    _networkBytesOutPerSec = (long)(bytesSentDiff / timeDiffSeconds);
+                }
+            }
+
+            _lastBytesReceived = totalBytesReceived;
+            _lastBytesSent = totalBytesSent;
+            _lastNetworkCheck = now;
+        }
+        catch
+        {
+            // Network stats unavailable
+            _networkBytesInPerSec = 0;
+            _networkBytesOutPerSec = 0;
+        }
+    }
 }
 
 /// <summary>
@@ -205,6 +276,8 @@ public class ServerStatsDto
     public long MemoryTotalBytes { get; set; }
     public long DiskUsedBytes { get; set; }
     public long DiskTotalBytes { get; set; }
+    public long NetworkBytesInPerSec { get; set; }
+    public long NetworkBytesOutPerSec { get; set; }
     public int ConnectedClients { get; set; }
     public int TotalClients { get; set; }
     public long UptimeSeconds { get; set; }

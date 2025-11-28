@@ -42,6 +42,7 @@ message Registration {
   string mac_address = 9;
   bool is_admin = 10;
   string country_code = 11;  // ISO 3166-1 alpha-2 country code from Windows locale
+  bool is_uac_enabled = 12;  // Whether UAC is enabled on the system
 }
 
 message Heartbeat {

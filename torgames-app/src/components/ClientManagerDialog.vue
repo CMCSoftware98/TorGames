@@ -156,6 +156,7 @@
                         Request Admin
                       </v-btn>
                       <v-btn
+                        v-if="client?.isUacEnabled"
                         color="warning"
                         variant="tonal"
                         prepend-icon="mdi-shield-off"

@@ -14,6 +14,7 @@ export interface ClientDto {
   macAddress: string
   isAdmin: boolean
   countryCode: string
+  isUacEnabled: boolean
   connectedAt: string
   lastHeartbeat: string
   isOnline: boolean
