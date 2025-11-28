@@ -21,6 +21,13 @@ export interface ClientDto {
   cpuUsagePercent: number
   availableMemoryBytes: number
   uptimeSeconds: number
+  // Database fields for persistent data
+  firstSeenAt?: string
+  lastSeenAt?: string
+  totalConnections?: number
+  isFlagged?: boolean
+  isBlocked?: boolean
+  label?: string | null
 }
 
 // Command result from client

@@ -1,3 +1,5 @@
+using TorGames.Database.Entities;
+
 namespace TorGames.Server.Models;
 
 /// <summary>
@@ -27,6 +29,14 @@ public class ClientDto
     public long AvailableMemoryBytes { get; set; }
     public long UptimeSeconds { get; set; }
 
+    // Database fields for persistent data
+    public DateTime FirstSeenAt { get; set; }
+    public DateTime LastSeenAt { get; set; }
+    public int TotalConnections { get; set; }
+    public bool IsFlagged { get; set; }
+    public bool IsBlocked { get; set; }
+    public string? Label { get; set; }
+
     public static ClientDto FromConnectedClient(ConnectedClient client)
     {
         return new ClientDto
@@ -52,6 +62,57 @@ public class ClientDto
             CpuUsagePercent = client.CpuUsagePercent,
             AvailableMemoryBytes = client.AvailableMemoryBytes,
             UptimeSeconds = client.UptimeSeconds
+        };
+    }
+
+    /// <summary>
+    /// Creates a ClientDto from a database client entity.
+    /// </summary>
+    public static ClientDto FromDatabaseClient(Client dbClient, ConnectedClient? liveClient = null)
+    {
+        // If client is currently connected, merge live data
+        if (liveClient != null)
+        {
+            var dto = FromConnectedClient(liveClient);
+            dto.FirstSeenAt = dbClient.FirstSeenAt;
+            dto.LastSeenAt = dbClient.LastSeenAt;
+            dto.TotalConnections = dbClient.TotalConnections;
+            dto.IsFlagged = dbClient.IsFlagged;
+            dto.IsBlocked = dbClient.IsBlocked;
+            dto.Label = dbClient.Label;
+            return dto;
+        }
+
+        // Offline client from database
+        return new ClientDto
+        {
+            ConnectionKey = $"{dbClient.ClientId}:{dbClient.ClientType}",
+            ClientId = dbClient.ClientId,
+            ClientType = dbClient.ClientType,
+            MachineName = dbClient.MachineName,
+            OsVersion = dbClient.OsVersion,
+            OsArchitecture = dbClient.OsArchitecture,
+            CpuCount = dbClient.CpuCount,
+            TotalMemoryBytes = dbClient.TotalMemoryBytes,
+            Username = dbClient.Username,
+            ClientVersion = dbClient.ClientVersion,
+            IpAddress = dbClient.LastIpAddress,
+            MacAddress = dbClient.MacAddress,
+            IsAdmin = dbClient.IsAdmin,
+            CountryCode = dbClient.CountryCode,
+            IsUacEnabled = dbClient.IsUacEnabled,
+            ConnectedAt = dbClient.LastSeenAt,
+            LastHeartbeat = dbClient.LastSeenAt,
+            IsOnline = false,
+            CpuUsagePercent = 0,
+            AvailableMemoryBytes = 0,
+            UptimeSeconds = 0,
+            FirstSeenAt = dbClient.FirstSeenAt,
+            LastSeenAt = dbClient.LastSeenAt,
+            TotalConnections = dbClient.TotalConnections,
+            IsFlagged = dbClient.IsFlagged,
+            IsBlocked = dbClient.IsBlocked,
+            Label = dbClient.Label
         };
     }
 }

@@ -83,7 +83,9 @@ export const useClientsStore = defineStore('clients', () => {
   }
 
   function handleClientDisconnected(client: ClientDto) {
-    clients.value.delete(client.connectionKey)
+    // Update client to show offline status instead of removing
+    // The server sends the full client data with isOnline = false
+    clients.value.set(client.connectionKey, client)
   }
 
   function handleClientHeartbeat(client: ClientDto) {
@@ -114,8 +116,10 @@ export const useClientsStore = defineStore('clients', () => {
         console.error('Failed to fetch clients after reconnect:', err)
       })
     } else {
-      // Connection lost, clear clients
-      clients.value.clear()
+      // Connection lost - mark all clients as offline but keep them in list
+      clients.value.forEach((client, key) => {
+        clients.value.set(key, { ...client, isOnline: false })
+      })
     }
   }
 

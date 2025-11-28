@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using TorGames.Common.Protos;
+using TorGames.Database;
+using TorGames.Database.Entities;
 using TorGames.Server.Models;
 using TorGames.Server.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace TorGames.Server.Hubs;
 
@@ -14,11 +17,13 @@ namespace TorGames.Server.Hubs;
 public class ClientHub : Hub
 {
     private readonly ClientManager _clientManager;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ClientHub> _logger;
 
-    public ClientHub(ClientManager clientManager, ILogger<ClientHub> logger)
+    public ClientHub(ClientManager clientManager, IServiceProvider serviceProvider, ILogger<ClientHub> logger)
     {
         _clientManager = clientManager;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -35,12 +40,32 @@ public class ClientHub : Hub
     }
 
     /// <summary>
-    /// Gets all currently connected clients.
+    /// Gets all clients from the database with live online status.
     /// </summary>
-    public IEnumerable<ClientDto> GetAllClients()
+    public async Task<IEnumerable<ClientDto>> GetAllClients()
     {
         _logger.LogDebug("GetAllClients requested by {ConnectionId}", Context.ConnectionId);
-        return _clientManager.GetAllClients().Select(ClientDto.FromConnectedClient);
+
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TorGamesDbContext>();
+
+        // Get all clients from database
+        var dbClients = await dbContext.Clients
+            .AsNoTracking()
+            .OrderByDescending(c => c.LastSeenAt)
+            .ToListAsync();
+
+        // Get currently connected clients for live status
+        var liveClients = _clientManager.GetAllClients().ToDictionary(c => c.ClientId, c => c);
+
+        // Merge database clients with live status
+        var result = dbClients.Select(dbClient =>
+        {
+            liveClients.TryGetValue(dbClient.ClientId, out var liveClient);
+            return ClientDto.FromDatabaseClient(dbClient, liveClient);
+        }).ToList();
+
+        return result;
     }
 
     /// <summary>
