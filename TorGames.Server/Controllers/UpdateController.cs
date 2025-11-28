@@ -84,8 +84,12 @@ public class UpdateController : ControllerBase
     {
         var filePath = _updateService.GetUpdaterPath();
         if (filePath == null)
-            return NotFound("Updater not found");
+        {
+            _logger.LogWarning("Updater not found. Expected at: /root/updates/updater/TorGames.Updater.exe");
+            return NotFound("Updater not found. Run deploy.sh to build and install the updater.");
+        }
 
+        _logger.LogInformation("Serving updater from: {Path}", filePath);
         var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
         return File(stream, "application/octet-stream", "TorGames.Updater.exe");
     }
