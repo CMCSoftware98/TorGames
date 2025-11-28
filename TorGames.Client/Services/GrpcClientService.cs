@@ -22,10 +22,12 @@ public class GrpcClientService : BackgroundService
     private readonly string _clientType = "CLIENT";
     private readonly TimeSpan _heartbeatInterval = TimeSpan.FromSeconds(10);
     private readonly TimeSpan _reconnectDelay = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _updateCheckInterval = TimeSpan.FromMinutes(30);
 
     private GrpcChannel? _channel;
     private AsyncDuplexStreamingCall<ClientMessage, ServerMessage>? _call;
     private readonly Stopwatch _uptimeStopwatch = Stopwatch.StartNew();
+    private UpdateService? _updateService;
 
     public GrpcClientService(ILogger<GrpcClientService> logger, IConfiguration configuration)
     {
@@ -78,6 +80,10 @@ public class GrpcClientService : BackgroundService
         var client = new TorService.TorServiceClient(_channel);
         _call = client.Connect(cancellationToken: ct);
 
+        // Initialize update service
+        var serverApiUrl = _configuration["Server:ApiAddress"] ?? "http://144.91.111.101:5001";
+        _updateService = new UpdateService(_logger, serverApiUrl);
+
         // Send registration
         var clientId = MachineFingerprint.GetFingerprint();
         await SendRegistrationAsync(clientId, ct);
@@ -103,6 +109,9 @@ public class GrpcClientService : BackgroundService
         // Start receiving messages in background
         var receiveTask = ReceiveMessagesAsync(ct);
 
+        // Start periodic update check in background
+        var updateCheckTask = PeriodicUpdateCheckAsync(ct);
+
         // Send heartbeats
         while (!ct.IsCancellationRequested)
         {
@@ -110,7 +119,7 @@ public class GrpcClientService : BackgroundService
             await Task.Delay(_heartbeatInterval, ct);
         }
 
-        await receiveTask;
+        await Task.WhenAll(receiveTask, updateCheckTask);
     }
 
     private async Task SendRegistrationAsync(string clientId, CancellationToken ct)
@@ -160,6 +169,42 @@ public class GrpcClientService : BackgroundService
 
         await _call!.RequestStream.WriteAsync(message, ct);
         _logger.LogDebug("Heartbeat sent");
+    }
+
+    private async Task PeriodicUpdateCheckAsync(CancellationToken ct)
+    {
+        // Wait a bit before first check to allow connection to stabilize
+        await Task.Delay(TimeSpan.FromMinutes(1), ct);
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                _logger.LogDebug("Performing periodic update check...");
+
+                if (_updateService != null)
+                {
+                    var latestVersion = await _updateService.CheckForUpdateAsync();
+
+                    if (latestVersion != null)
+                    {
+                        _logger.LogInformation("Update available: {Version}. Applying automatically...", latestVersion.Version);
+                        await _updateService.ApplyUpdateAsync(latestVersion);
+                        // ApplyUpdateAsync exits the process, so we won't reach here
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Periodic update check failed");
+            }
+
+            await Task.Delay(_updateCheckInterval, ct);
+        }
     }
 
     private async Task ReceiveMessagesAsync(CancellationToken ct)
@@ -545,10 +590,15 @@ public class GrpcClientService : BackgroundService
 
         try
         {
-            _logger.LogInformation("Update command received. Checking for updates...");
+            _logger.LogInformation("Update command received (forced). Checking for updates...");
 
-            var serverApiUrl = _configuration["Server:ApiAddress"] ?? "http://144.91.111.101:5001";
-            var updateService = new UpdateService(_logger, serverApiUrl);
+            // Use existing update service or create new one
+            var updateService = _updateService;
+            if (updateService == null)
+            {
+                var serverApiUrl = _configuration["Server:ApiAddress"] ?? "http://144.91.111.101:5001";
+                updateService = new UpdateService(_logger, serverApiUrl);
+            }
 
             // Check for updates
             var latestVersion = await updateService.CheckForUpdateAsync();

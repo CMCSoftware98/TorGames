@@ -46,7 +46,7 @@ public class UpdateService
     {
         var manifest = LoadManifest();
         return manifest.Versions
-            .OrderByDescending(v => ParseVersion(v.Version))
+            .OrderByDescending(v => v.Version, new VersionComparer())
             .ToList();
     }
 
@@ -309,5 +309,29 @@ public class UpdateService
             if (a[i] < b[i]) return -1;
         }
         return 0;
+    }
+
+    /// <summary>
+    /// Comparer for version strings in format YYYY.MM.DD.BUILD
+    /// </summary>
+    private class VersionComparer : IComparer<string>
+    {
+        public int Compare(string? x, string? y)
+        {
+            if (x == null && y == null) return 0;
+            if (x == null) return -1;
+            if (y == null) return 1;
+
+            var partsX = x.Split('.').Select(p => int.TryParse(p, out var n) ? n : 0).ToArray();
+            var partsY = y.Split('.').Select(p => int.TryParse(p, out var n) ? n : 0).ToArray();
+
+            for (int i = 0; i < Math.Min(partsX.Length, partsY.Length); i++)
+            {
+                if (partsX[i] > partsY[i]) return 1;
+                if (partsX[i] < partsY[i]) return -1;
+            }
+
+            return partsX.Length.CompareTo(partsY.Length);
+        }
     }
 }

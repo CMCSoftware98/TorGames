@@ -21,7 +21,7 @@ var serverAddress = args.FirstOrDefault(a => a.StartsWith("http://") || a.Starts
 // Handle post-update cleanup
 if (isPostUpdate)
 {
-    Console.WriteLine("Post-update mode detected. Cleaning up...");
+    Console.WriteLine("Post-update mode detected. Cleaning up..");
     using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
     var updateLogger = loggerFactory.CreateLogger<UpdateService>();
     var updateService = new UpdateService(updateLogger, DefaultApiAddress);

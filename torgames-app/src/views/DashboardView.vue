@@ -5,9 +5,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useClientsStore } from '@/stores/clients'
 import { useSettingsStore } from '@/stores/settings'
 import { signalRService } from '@/services/signalr'
+import { getVersions } from '@/services/api'
 import ClientManagerDialog from '@/components/ClientManagerDialog.vue'
 import VersionManagement from '@/components/VersionManagement.vue'
 import type { ClientDto } from '@/types/client'
+import type { VersionInfo } from '@/types/version'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -35,6 +37,9 @@ const search = ref('')
 // Connection status
 const connectionError = ref<string | null>(null)
 
+// Latest version from server
+const latestVersion = ref<VersionInfo | null>(null)
+
 // Snackbar state
 const snackbar = ref({
   show: false,
@@ -48,7 +53,7 @@ interface DisplayClient {
   connectionKey: string
   clientId: string
   version: string
-  location: string
+  isOutdated: boolean
   ipAddress: string
   machineName: string
   operatingSystem: string
@@ -59,6 +64,22 @@ interface DisplayClient {
   lastSeen: string
   status: 'online' | 'offline'
   raw: ClientDto
+}
+
+// Compare version strings (format: YYYY.MM.DD.BUILD)
+function isVersionOutdated(clientVersion: string, latestVer: VersionInfo | null): boolean {
+  if (!latestVer) return false
+  if (!clientVersion || clientVersion === '0.0.0' || clientVersion === '1.0.0') return true
+
+  const parseVersion = (v: string) => v.split('.').map(p => parseInt(p, 10) || 0)
+  const client = parseVersion(clientVersion)
+  const latest = parseVersion(latestVer.version)
+
+  for (let i = 0; i < 4; i++) {
+    if ((client[i] || 0) < (latest[i] || 0)) return true
+    if ((client[i] || 0) > (latest[i] || 0)) return false
+  }
+  return false
 }
 
 const transformClient = (client: ClientDto): DisplayClient => {
@@ -83,12 +104,14 @@ const transformClient = (client: ClientDto): DisplayClient => {
     ? 'Online Now'
     : `${formatDuration(timeSinceHeartbeat)} ago`
 
+  const clientVer = client.clientVersion || '0.0.0'
+
   return {
     id: client.connectionKey,
     connectionKey: client.connectionKey,
     clientId: client.clientId.substring(0, 20) || client.machineName,
-    version: client.clientVersion || '1.0',
-    location: client.ipAddress.split('.')[0] || 'Unknown',
+    version: clientVer,
+    isOutdated: isVersionOutdated(clientVer, latestVersion.value),
     ipAddress: client.ipAddress,
     machineName: client.machineName,
     operatingSystem: `${client.osVersion} ${client.osArchitecture}`,
@@ -118,8 +141,7 @@ const sortedClients = computed(() => {
 
 const headers = [
   { title: 'Client ID', key: 'clientId', sortable: true },
-  { title: 'Version', key: 'version', sortable: true, width: '80px' },
-  { title: 'Location', key: 'location', sortable: true, width: '80px' },
+  { title: 'Version', key: 'version', sortable: true, width: '140px' },
   { title: 'IP Address', key: 'ipAddress', sortable: true },
   { title: 'Machine Name', key: 'machineName', sortable: true },
   { title: 'Operating System', key: 'operatingSystem', sortable: true },
@@ -279,9 +301,69 @@ async function sendPowerCommand(commandType: string, actionName: string) {
   }
 }
 
+// Check if selected client is outdated
+const isContextClientOutdated = computed(() => {
+  if (!contextMenuClient.value || !latestVersion.value) return false
+  return isVersionOutdated(contextMenuClient.value.clientVersion || '0.0.0', latestVersion.value)
+})
+
+async function forceUpdateClient() {
+  if (!contextMenuClient.value) return
+
+  contextMenu.value = false
+
+  try {
+    const command = {
+      connectionKey: contextMenuClient.value.connectionKey,
+      commandType: 'update',
+      commandText: '',
+      timeoutSeconds: 300
+    }
+
+    const success = await signalRService.executeCommand(command)
+
+    if (success) {
+      snackbar.value = {
+        show: true,
+        message: `Force update command sent to ${contextMenuClient.value.machineName}`,
+        color: 'success'
+      }
+    } else {
+      snackbar.value = {
+        show: true,
+        message: `Failed to send update command to ${contextMenuClient.value.machineName}`,
+        color: 'error'
+      }
+    }
+  } catch (e) {
+    snackbar.value = {
+      show: true,
+      message: e instanceof Error ? e.message : 'Failed to send update command',
+      color: 'error'
+    }
+  }
+}
+
+async function loadLatestVersion() {
+  try {
+    const token = authStore.sessionToken
+    if (!token) return
+
+    const versions = await getVersions(token)
+    if (versions.length > 0) {
+      // Versions are sorted descending, so first is latest
+      latestVersion.value = versions[0] ?? null
+    }
+  } catch (e) {
+    console.error('Failed to load latest version:', e)
+  }
+}
+
 onMounted(async () => {
   // Initialize settings
   await settingsStore.initialize()
+  // Load latest version info
+  await loadLatestVersion()
   // Connect to SignalR hub
   await connectToServer()
 })
@@ -451,6 +533,21 @@ onUnmounted(async () => {
               </div>
             </template>
 
+            <template #item.version="{ item }">
+              <div class="d-flex align-center">
+                <span :class="item.isOutdated ? 'text-warning' : ''">{{ item.version }}</span>
+                <v-icon
+                  v-if="item.isOutdated"
+                  color="warning"
+                  size="small"
+                  class="ml-1"
+                >
+                  mdi-alert-circle
+                  <v-tooltip activator="parent" location="top">Update available</v-tooltip>
+                </v-icon>
+              </div>
+            </template>
+
             <template #item.isAdmin="{ item }">
               <v-icon
                 :color="item.isAdmin ? 'success' : 'error'"
@@ -557,6 +654,16 @@ onUnmounted(async () => {
           <v-divider class="my-1" />
           <v-list-item prepend-icon="mdi-monitor" title="Client Manager" @click="openClientManager" />
           <v-list-item prepend-icon="mdi-shield-off" title="Disable UAC" @click="disableUac" />
+          <v-list-item
+            v-if="isContextClientOutdated"
+            prepend-icon="mdi-update"
+            title="Force Update"
+            @click="forceUpdateClient"
+          >
+            <template #append>
+              <v-chip size="x-small" color="warning" variant="flat">Outdated</v-chip>
+            </template>
+          </v-list-item>
           <v-divider class="my-1" />
           <v-list-item prepend-icon="mdi-remote-desktop" title="Remote Desktop" @click="contextMenu = false" />
           <v-list-item prepend-icon="mdi-webcam" title="Remote Webcam" @click="contextMenu = false" />
