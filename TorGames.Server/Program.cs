@@ -46,6 +46,9 @@ builder.Services.AddSingleton<UpdateService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<SignalRBroadcastService>();
 
+// Add graceful shutdown handler
+builder.Services.AddHostedService<GracefulShutdownService>();
+
 // Add Controllers for REST API
 builder.Services.AddControllers();
 
@@ -145,6 +148,14 @@ app.Lifetime.ApplicationStarted.Register(() =>
     Console.WriteLine("  REST API on: http://0.0.0.0:5001");
     Console.WriteLine("  SignalR Hub: /hubs/clients");
     Console.WriteLine("  Max connections: 15,000");
+    Console.WriteLine("  Press Ctrl+C to shutdown gracefully");
+    Console.WriteLine("========================================");
+});
+
+app.Lifetime.ApplicationStopped.Register(() =>
+{
+    Console.WriteLine("========================================");
+    Console.WriteLine("  TorGames Server Stopped");
     Console.WriteLine("========================================");
 });
 

@@ -15,21 +15,7 @@ const uploadDialog = ref(false)
 const uploadLoading = ref(false)
 const selectedFile = ref<File | null>(null)
 const releaseNotes = ref('')
-const versionNumber = ref('')
 const uploadError = ref<string | null>(null)
-
-function generateNextVersion(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
-  const day = now.getDate()
-  // Use HHMM as build number - unique per minute, always increases throughout the day
-  const hours = now.getHours()
-  const minutes = now.getMinutes()
-  const build = hours * 100 + minutes
-
-  return `${year}.${month}.${day}.${build}`
-}
 
 // Delete dialog
 const deleteDialog = ref(false)
@@ -86,7 +72,6 @@ async function loadVersions() {
 function openUploadDialog() {
   selectedFile.value = null
   releaseNotes.value = ''
-  versionNumber.value = generateNextVersion()
   uploadError.value = null
   uploadDialog.value = true
 }
@@ -115,7 +100,7 @@ async function handleUpload() {
       return
     }
 
-    const result = await uploadVersion(token, selectedFile.value, releaseNotes.value, versionNumber.value)
+    const result = await uploadVersion(token, selectedFile.value, releaseNotes.value)
 
     if (result.success) {
       uploadDialog.value = false
@@ -323,19 +308,6 @@ onMounted(() => {
             {{ uploadError }}
           </v-alert>
 
-          <v-text-field
-            v-model="versionNumber"
-            label="Version"
-            placeholder="YYYY.MM.DD.BUILD"
-            prepend-icon="mdi-tag"
-            variant="outlined"
-            density="compact"
-            :disabled="uploadLoading"
-            hint="Auto-generated based on current date/time"
-            persistent-hint
-            class="mb-2"
-          />
-
           <v-file-input
             label="Client Executable"
             accept=".exe"
@@ -358,8 +330,8 @@ onMounted(() => {
 
           <v-alert type="info" density="compact" variant="tonal" class="mt-2">
             <template #text>
-              Version is auto-generated using format YYYY.MM.DD.HHMM (e.g., 2025.11.28.1430).
-              Each upload must have a higher version than existing ones.
+              Version is automatically extracted from the executable's assembly metadata.
+              Build the client with "dotnet publish" to embed the version (format: YYYY.M.D.HHMM).
             </template>
           </v-alert>
         </v-card-text>

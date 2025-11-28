@@ -96,15 +96,14 @@ public class UpdateController : ControllerBase
 
     /// <summary>
     /// Uploads a new version of the client.
-    /// Version can be provided manually or extracted from file metadata (Windows only).
+    /// Version is automatically extracted from the executable's assembly metadata.
     /// </summary>
     [HttpPost("upload")]
     [Authorize]
     [RequestSizeLimit(200_000_000)] // 200MB max
     public async Task<ActionResult<VersionInfo>> UploadVersion(
         [FromForm] IFormFile file,
-        [FromForm] string? releaseNotes,
-        [FromForm] string? version)
+        [FromForm] string? releaseNotes)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file provided");
@@ -121,33 +120,32 @@ public class UpdateController : ControllerBase
                 await file.CopyToAsync(fs);
             }
 
-            // Use provided version or try to extract from file metadata
-            var finalVersion = version;
-            if (string.IsNullOrEmpty(finalVersion))
+            // Extract version from assembly metadata
+            var extractedVersion = _updateService.ExtractVersionFromFile(tempPath);
+
+            if (string.IsNullOrEmpty(extractedVersion))
             {
-                finalVersion = _updateService.ExtractVersionFromFile(tempPath);
+                return BadRequest("Could not extract version from executable. Ensure the client was built with proper version metadata (format: YYYY.MM.DD.HHMM)");
             }
 
-            if (string.IsNullOrEmpty(finalVersion))
-            {
-                return BadRequest("Version is required. Provide it manually in the format YYYY.MM.DD.BUILD (e.g., 2025.11.28.1)");
-            }
+            _logger.LogInformation("Extracted version from uploaded file: {Version}", extractedVersion);
 
             // Validate version is higher than existing
-            if (!_updateService.IsValidNewVersion(finalVersion))
+            if (!_updateService.IsValidNewVersion(extractedVersion))
             {
-                return BadRequest($"Version {finalVersion} is not valid or not higher than existing versions. Use format YYYY.MM.DD.BUILD");
+                var latestVersion = _updateService.GetLatestVersion()?.Version ?? "none";
+                return BadRequest($"Version {extractedVersion} is not higher than the latest version ({latestVersion}). Build a newer version of the client.");
             }
 
             // Add version using temp file
             await using var fileStream = System.IO.File.OpenRead(tempPath);
             var versionInfo = await _updateService.AddVersionAsync(
                 fileStream,
-                finalVersion,
+                extractedVersion,
                 releaseNotes ?? string.Empty,
                 User.Identity?.Name ?? "Unknown");
 
-            _logger.LogInformation("Version {Version} uploaded successfully", finalVersion);
+            _logger.LogInformation("Version {Version} uploaded successfully", extractedVersion);
             return Ok(versionInfo);
         }
         catch (Exception ex)

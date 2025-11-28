@@ -89,16 +89,12 @@ export async function getVersions(token: string): Promise<VersionInfo[]> {
 export async function uploadVersion(
   token: string,
   file: File,
-  releaseNotes: string,
-  version?: string
+  releaseNotes: string
 ): Promise<{ success: boolean; version?: VersionInfo; error?: string }> {
   try {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('releaseNotes', releaseNotes)
-    if (version) {
-      formData.append('version', version)
-    }
 
     const response = await fetch(`${API_BASE_URL}/update/upload`, {
       method: 'POST',

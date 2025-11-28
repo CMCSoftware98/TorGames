@@ -1,3 +1,5 @@
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text.Json;
 using TorGames.Server.Models;
@@ -238,19 +240,135 @@ public class UpdateService
     }
 
     /// <summary>
-    /// Extracts version from uploaded file's metadata.
+    /// Extracts version from a .NET assembly file using PE metadata.
+    /// Works cross-platform (Linux/Windows).
     /// </summary>
     public string? ExtractVersionFromFile(string filePath)
     {
         try
         {
-            var versionInfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(filePath);
-            return versionInfo.ProductVersion;
+            // Try reading PE metadata (works cross-platform)
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var peReader = new PEReader(fs);
+
+            if (!peReader.HasMetadata)
+            {
+                _logger.LogWarning("File has no .NET metadata: {FilePath}", filePath);
+                return null;
+            }
+
+            var metadataReader = peReader.GetMetadataReader();
+
+            // Try to get AssemblyInformationalVersion first (most accurate)
+            foreach (var attrHandle in metadataReader.GetAssemblyDefinition().GetCustomAttributes())
+            {
+                var attr = metadataReader.GetCustomAttribute(attrHandle);
+                var ctorHandle = attr.Constructor;
+
+                if (ctorHandle.Kind == HandleKind.MemberReference)
+                {
+                    var memberRef = metadataReader.GetMemberReference((MemberReferenceHandle)ctorHandle);
+                    var typeRef = metadataReader.GetTypeReference((TypeReferenceHandle)memberRef.Parent);
+                    var typeName = metadataReader.GetString(typeRef.Name);
+
+                    if (typeName == "AssemblyInformationalVersionAttribute")
+                    {
+                        var value = attr.DecodeValue(new CustomAttributeTypeProvider());
+                        if (value.FixedArguments.Length > 0)
+                        {
+                            var version = value.FixedArguments[0].Value?.ToString();
+                            if (!string.IsNullOrEmpty(version))
+                            {
+                                // Remove any +commit suffix if present
+                                var plusIndex = version.IndexOf('+');
+                                if (plusIndex > 0)
+                                {
+                                    version = version.Substring(0, plusIndex);
+                                }
+                                _logger.LogInformation("Extracted InformationalVersion: {Version}", version);
+                                return version;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to AssemblyVersion
+            var assemblyDef = metadataReader.GetAssemblyDefinition();
+            var assemblyVersion = assemblyDef.Version;
+            var versionString = $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}.{assemblyVersion.Revision}";
+            _logger.LogInformation("Extracted AssemblyVersion: {Version}", versionString);
+            return versionString;
         }
-        catch
+        catch (BadImageFormatException ex)
         {
+            // This might be a single-file bundled app - try alternative approach
+            _logger.LogWarning(ex, "Could not read PE metadata (possibly single-file app): {FilePath}", filePath);
+            return ExtractVersionFromSingleFileApp(filePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to extract version from file: {FilePath}", filePath);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Attempts to extract version from a single-file .NET app by searching for version patterns.
+    /// </summary>
+    private string? ExtractVersionFromSingleFileApp(string filePath)
+    {
+        try
+        {
+            // For single-file apps, we can search for the version string pattern in the binary
+            // The InformationalVersion is typically stored as a UTF-8 string
+            var fileBytes = File.ReadAllBytes(filePath);
+            var fileContent = System.Text.Encoding.UTF8.GetString(fileBytes);
+
+            // Look for version pattern: YYYY.MM.DD.BUILD (e.g., 2025.11.28.1234)
+            var versionPattern = new System.Text.RegularExpressions.Regex(@"20\d{2}\.\d{1,2}\.\d{1,2}\.\d{1,5}");
+            var matches = versionPattern.Matches(fileContent);
+
+            if (matches.Count > 0)
+            {
+                // Find the most likely version (one that appears multiple times or looks valid)
+                var versionCounts = new Dictionary<string, int>();
+                foreach (System.Text.RegularExpressions.Match match in matches)
+                {
+                    var v = match.Value;
+                    versionCounts.TryGetValue(v, out var count);
+                    versionCounts[v] = count + 1;
+                }
+
+                // Get the version that appears most frequently
+                var bestVersion = versionCounts.OrderByDescending(x => x.Value).First().Key;
+                _logger.LogInformation("Extracted version from single-file app (pattern match): {Version}", bestVersion);
+                return bestVersion;
+            }
+
+            _logger.LogWarning("Could not find version pattern in single-file app");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to extract version from single-file app");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Custom attribute type provider for decoding custom attributes.
+    /// </summary>
+    private class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<object>
+    {
+        public object GetPrimitiveType(PrimitiveTypeCode typeCode) => typeCode;
+        public object GetSystemType() => typeof(Type);
+        public object GetSZArrayType(object elementType) => elementType;
+        public object GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind) => handle;
+        public object GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) => handle;
+        public object GetTypeFromSerializedName(string name) => name;
+        public PrimitiveTypeCode GetUnderlyingEnumType(object type) => PrimitiveTypeCode.Int32;
+        public bool IsSystemType(object type) => type is Type;
     }
 
     private VersionManifest LoadManifest()

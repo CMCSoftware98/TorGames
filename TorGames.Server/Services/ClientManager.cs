@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using TorGames.Common.Protos;
 using TorGames.Server.Models;
+using Command = TorGames.Common.Protos.Command;
 
 namespace TorGames.Server.Services;
 
@@ -274,5 +275,68 @@ public class ClientManager
         }
 
         return staleClients.Count;
+    }
+
+    /// <summary>
+    /// Gracefully disconnects all clients. Sends a shutdown notification to each client.
+    /// </summary>
+    public async Task DisconnectAllClientsAsync()
+    {
+        var clients = _clients.Values.ToList();
+
+        if (clients.Count == 0)
+        {
+            _logger.LogInformation("No clients to disconnect");
+            return;
+        }
+
+        _logger.LogInformation("Gracefully disconnecting {Count} clients...", clients.Count);
+
+        // Send shutdown notification to all clients in parallel
+        var tasks = clients.Select(async client =>
+        {
+            try
+            {
+                // Send a shutdown command to notify the client
+                var shutdownMessage = new ServerMessage
+                {
+                    MessageId = Guid.NewGuid().ToString(),
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Command = new Command
+                    {
+                        CommandId = Guid.NewGuid().ToString(),
+                        CommandType = "server_shutdown",
+                        CommandText = "Server is shutting down. Please reconnect later.",
+                        TimeoutSeconds = 0
+                    }
+                };
+
+                await client.SendMessageAsync(shutdownMessage);
+                _logger.LogDebug("Sent shutdown notification to {ConnectionKey}", client.ConnectionKey);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Error sending shutdown notification to {ConnectionKey}", client.ConnectionKey);
+            }
+        });
+
+        // Wait for all notifications to be sent (with timeout)
+        try
+        {
+            await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogWarning("Timeout waiting for shutdown notifications to complete");
+        }
+
+        // Clear all clients
+        var connectionKeys = _clients.Keys.ToList();
+        foreach (var key in connectionKeys)
+        {
+            RemoveClient(key);
+        }
+
+        _logger.LogInformation("All clients disconnected");
     }
 }
