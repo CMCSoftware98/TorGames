@@ -45,7 +45,7 @@ public class UpdateService
         _serverUrl = serverUrl.TrimEnd('/');
         _httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
 
-        // Get current version - prefer version file, fallback to assembly
+        // Get current version - prefer version file, fallback to compiled version
         _currentVersion = GetCurrentVersion();
 
         _logger.LogInformation("UpdateService initialized. Current version: {Version}", _currentVersion);
@@ -71,10 +71,8 @@ public class UpdateService
             // Ignore errors reading version file
         }
 
-        // Fallback to assembly version
-        return Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion ?? "0.0.0";
+        // Use the VersionInfo class (most reliable for single-file apps)
+        return TorGames.Client.VersionInfo.Version;
     }
 
     /// <summary>

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,7 +8,7 @@ using TorGames.Client.Services;
 var exePath = AppContext.BaseDirectory;
 var versionFilePath = Path.Combine(exePath, "TorGames.version");
 
-// Get version - prefer version file, fallback to assembly
+// Get version - prefer version file, fallback to compiled VersionInfo
 string version;
 if (File.Exists(versionFilePath))
 {
@@ -17,9 +16,7 @@ if (File.Exists(versionFilePath))
 }
 else
 {
-    version = Assembly.GetExecutingAssembly()
-        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-        ?.InformationalVersion ?? "0.0.0";
+    version = TorGames.Client.VersionInfo.Version;
 }
 
 // Default server addresses - change this for deployment

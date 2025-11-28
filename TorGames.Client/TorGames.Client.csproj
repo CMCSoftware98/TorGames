@@ -35,17 +35,21 @@
         <EventSourceSupport>false</EventSourceSupport>
     </PropertyGroup>
 
-    <!-- Auto-generate version: YYYY.MM.DD.HHMM - always unique and incrementing -->
-    <Target Name="SetAutoVersion" BeforeTargets="GenerateAssemblyInfo" Condition="'$(Version)' == ''">
-        <PropertyGroup>
-            <!-- Format: 2025.11.28.1430 (year.month.day.hourminute) -->
-            <AutoVersion>$([System.DateTime]::Now.ToString("yyyy.M.d.HHmm"))</AutoVersion>
-            <Version>$(AutoVersion)</Version>
-            <AssemblyVersion>$(AutoVersion)</AssemblyVersion>
-            <FileVersion>$(AutoVersion)</FileVersion>
-            <InformationalVersion>$(AutoVersion)</InformationalVersion>
-        </PropertyGroup>
-        <Message Text="Auto-generated version: $(AutoVersion)" Importance="high" />
+    <!-- Auto-generate version: YYYY.M.D.HHmm - always unique and incrementing -->
+    <PropertyGroup>
+        <!-- Format: 2025.11.28.1430 (year.month.day.hourminute) -->
+        <AutoVersion>$([System.DateTime]::Now.ToString("yyyy.M.d.HHmm"))</AutoVersion>
+        <Version>$(AutoVersion)</Version>
+        <AssemblyVersion>$(AutoVersion)</AssemblyVersion>
+        <FileVersion>$(AutoVersion)</FileVersion>
+        <InformationalVersion>$(AutoVersion)</InformationalVersion>
+    </PropertyGroup>
+
+    <Target Name="ShowVersion" BeforeTargets="CoreCompile">
+        <Message Text="========================================" Importance="high" />
+        <Message Text="  Building TorGames.Client" Importance="high" />
+        <Message Text="  Version: $(AutoVersion)" Importance="high" />
+        <Message Text="========================================" Importance="high" />
     </Target>
 
     <ItemGroup>

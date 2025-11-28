@@ -596,11 +596,8 @@ public class GrpcClientService : BackgroundService
             // Ignore errors reading version file
         }
 
-        // Fallback to assembly version
-        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-        var attribute = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-            .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute;
-        return attribute?.InformationalVersion ?? "0.0.0";
+        // Use the VersionInfo class (most reliable for single-file apps)
+        return TorGames.Client.VersionInfo.Version;
     }
 
     private async Task<CommandResult> HandleUpdateCommandAsync(Command command, CancellationToken ct)

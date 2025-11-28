@@ -317,19 +317,29 @@ public class UpdateService
     }
 
     /// <summary>
-    /// Attempts to extract version from a single-file .NET app by searching for version patterns.
+    /// Attempts to extract version from a single-file .NET app by searching for version markers.
     /// </summary>
     private string? ExtractVersionFromSingleFileApp(string filePath)
     {
         try
         {
-            // For single-file apps, we can search for the version string pattern in the binary
-            // The InformationalVersion is typically stored as a UTF-8 string
+            // For single-file apps, search for our custom version marker in the binary
             var fileBytes = File.ReadAllBytes(filePath);
             var fileContent = System.Text.Encoding.UTF8.GetString(fileBytes);
 
-            // Look for version pattern: YYYY.MM.DD.BUILD (e.g., 2025.11.28.1234)
-            var versionPattern = new System.Text.RegularExpressions.Regex(@"20\d{2}\.\d{1,2}\.\d{1,2}\.\d{1,5}");
+            // First, try to find our custom version marker: TORGAMES_VERSION_YYYY.M.D.HHmm_END
+            var markerPattern = new System.Text.RegularExpressions.Regex(@"TORGAMES_VERSION_(20\d{2}\.\d{1,2}\.\d{1,2}\.\d{1,4})_END");
+            var markerMatch = markerPattern.Match(fileContent);
+
+            if (markerMatch.Success)
+            {
+                var version = markerMatch.Groups[1].Value;
+                _logger.LogInformation("Extracted version from marker: {Version}", version);
+                return version;
+            }
+
+            // Fallback: Look for version pattern: YYYY.M.D.HHmm (e.g., 2025.11.28.1430)
+            var versionPattern = new System.Text.RegularExpressions.Regex(@"20\d{2}\.\d{1,2}\.\d{1,2}\.\d{3,4}");
             var matches = versionPattern.Matches(fileContent);
 
             if (matches.Count > 0)
@@ -339,14 +349,20 @@ public class UpdateService
                 foreach (System.Text.RegularExpressions.Match match in matches)
                 {
                     var v = match.Value;
+                    // Skip versions that look like timestamps or other data
+                    if (v.EndsWith(".0000") || v.EndsWith(".0001"))
+                        continue;
                     versionCounts.TryGetValue(v, out var count);
                     versionCounts[v] = count + 1;
                 }
 
-                // Get the version that appears most frequently
-                var bestVersion = versionCounts.OrderByDescending(x => x.Value).First().Key;
-                _logger.LogInformation("Extracted version from single-file app (pattern match): {Version}", bestVersion);
-                return bestVersion;
+                if (versionCounts.Count > 0)
+                {
+                    // Get the version that appears most frequently
+                    var bestVersion = versionCounts.OrderByDescending(x => x.Value).First().Key;
+                    _logger.LogInformation("Extracted version from pattern match: {Version}", bestVersion);
+                    return bestVersion;
+                }
             }
 
             _logger.LogWarning("Could not find version pattern in single-file app");
