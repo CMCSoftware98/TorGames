@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TorGames.Common.Protos;
 using TorGames.Server.Models;
 using TorGames.Server.Services;
 
@@ -13,11 +14,16 @@ namespace TorGames.Server.Controllers;
 public class UpdateController : ControllerBase
 {
     private readonly UpdateService _updateService;
+    private readonly ClientManager _clientManager;
     private readonly ILogger<UpdateController> _logger;
 
-    public UpdateController(UpdateService updateService, ILogger<UpdateController> logger)
+    public UpdateController(
+        UpdateService updateService,
+        ClientManager clientManager,
+        ILogger<UpdateController> logger)
     {
         _updateService = updateService;
+        _clientManager = clientManager;
         _logger = logger;
     }
 
@@ -146,6 +152,32 @@ public class UpdateController : ControllerBase
                 User.Identity?.Name ?? "Unknown");
 
             _logger.LogInformation("Version {Version} uploaded successfully", extractedVersion);
+
+            // Notify all connected clients about the new update
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var updateCommand = new Command
+                    {
+                        CommandId = Guid.NewGuid().ToString(),
+                        CommandType = "update_available",
+                        CommandText = extractedVersion,
+                        TimeoutSeconds = 0
+                    };
+
+                    var clientCount = await _clientManager.BroadcastCommandToAllAsync(updateCommand);
+                    _logger.LogInformation(
+                        "Notified {ClientCount} clients about new version {Version}",
+                        clientCount,
+                        extractedVersion);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to notify clients about new update");
+                }
+            });
+
             return Ok(versionInfo);
         }
         catch (Exception ex)
