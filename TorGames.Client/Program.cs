@@ -4,7 +4,7 @@ using Microsoft.Extensions.Hosting;
 using TorGames.Client.Services;
 
 // Default server address - change this for deployment
-const string DefaultServerAddress = "http://88.97.246.195:5000";
+const string DefaultServerAddress = "http://144.91.111.101:5000";
 
 // Allow override via command line: TorGames.Client.exe http://192.168.1.100:5000
 var serverAddress = args.Length > 0 ? args[0] : DefaultServerAddress;
