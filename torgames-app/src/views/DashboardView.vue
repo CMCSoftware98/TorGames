@@ -20,6 +20,9 @@ const settingsStore = useSettingsStore()
 
 const activeTab = ref('clients')
 
+// Machine list sub-tab state
+const machineListTab = ref<'online' | 'offline'>('online')
+
 // Context menu state
 const contextMenu = ref(false)
 const contextMenuX = ref(0)
@@ -138,13 +141,19 @@ const displayClients = computed(() => {
   return clientsStore.clientList.map(transformClient)
 })
 
-// Sorted clients - online first, then offline
-const sortedClients = computed(() => {
-  return [...displayClients.value].sort((a, b) => {
-    if (a.status === 'online' && b.status === 'offline') return -1
-    if (a.status === 'offline' && b.status === 'online') return 1
-    return 0
-  })
+// Online clients only
+const onlineClients = computed(() => {
+  return displayClients.value.filter(c => c.status === 'online')
+})
+
+// Offline clients only
+const offlineClients = computed(() => {
+  return displayClients.value.filter(c => c.status === 'offline')
+})
+
+// Current tab's clients
+const currentTabClients = computed(() => {
+  return machineListTab.value === 'online' ? onlineClients.value : offlineClients.value
 })
 
 const headers = [
@@ -162,6 +171,12 @@ const isConnecting = computed(() => clientsStore.isConnecting)
 
 const showContextMenu = (e: MouseEvent, item: DisplayClient) => {
   e.preventDefault()
+
+  // Don't show context menu for offline clients
+  if (item.status === 'offline') {
+    return
+  }
+
   contextMenuX.value = e.clientX
   contextMenuY.value = e.clientY
   contextMenuClient.value = item.raw
@@ -328,11 +343,25 @@ onUnmounted(async () => {
         </v-btn>
       </div>
 
+      <!-- Online/Offline Tabs -->
+      <v-tabs v-model="machineListTab" class="mb-4" color="primary" density="compact">
+        <v-tab value="online" class="text-none">
+          <v-icon start size="small" color="success">mdi-circle</v-icon>
+          Online
+          <v-chip size="x-small" class="ml-2" color="success" variant="flat">{{ onlineClients.length }}</v-chip>
+        </v-tab>
+        <v-tab value="offline" class="text-none">
+          <v-icon start size="small" color="grey">mdi-circle-outline</v-icon>
+          Offline
+          <v-chip size="x-small" class="ml-2" color="grey" variant="flat">{{ offlineClients.length }}</v-chip>
+        </v-tab>
+      </v-tabs>
+
       <!-- Data Table -->
       <v-data-table
         v-model="selectedClients"
         :headers="headers"
-        :items="sortedClients"
+        :items="currentTabClients"
         :items-per-page="-1"
         :search="search"
         item-value="id"

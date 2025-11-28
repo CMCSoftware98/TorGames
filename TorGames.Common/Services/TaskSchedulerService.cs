@@ -25,6 +25,7 @@ public class TaskSchedulerResult
 public static class TaskSchedulerService
 {
     public const string TaskName = "TorGames Client";
+    public const string InstallerTaskName = "TorGames Installer";
     public const string TaskFolder = "\\TorGames";
     private const string FolderName = "TorGames";
 
@@ -447,6 +448,54 @@ public static class TaskSchedulerService
             }
 
             return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes the installer startup task if it exists.
+    /// Should be called by the Client on startup to clean up the installer.
+    /// </summary>
+    public static bool RemoveInstallerTask()
+    {
+        // Try using schtasks.exe first (works even when trimmed)
+        var schtasksResult = RemoveInstallerTaskViaSchtasks();
+        if (schtasksResult) return true;
+
+        // Fall back to TaskScheduler library
+        try
+        {
+            using var ts = new TaskService();
+            var folder = ts.GetFolder(TaskFolder);
+
+            if (folder == null) return true; // Folder doesn't exist, nothing to remove
+
+            if (folder.Tasks.Any(t => t.Name == InstallerTaskName))
+            {
+                folder.DeleteTask(InstallerTaskName, false);
+                return true;
+            }
+
+            return true; // Task doesn't exist, that's fine
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Remove installer task using schtasks.exe command-line.
+    /// </summary>
+    private static bool RemoveInstallerTaskViaSchtasks()
+    {
+        try
+        {
+            var (success, _, _) = RunSchtasks($"/Delete /TN \"{TaskFolder}\\{InstallerTaskName}\" /F");
+            return success;
         }
         catch
         {

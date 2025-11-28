@@ -58,6 +58,10 @@ builder.Services.AddHostedService<DatabaseSyncService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<SignalRBroadcastService>();
 
+// Add TCP Installer Service for lightweight C++ clients
+builder.Services.AddSingleton<TcpInstallerService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TcpInstallerService>());
+
 // Add graceful shutdown handler
 builder.Services.AddHostedService<GracefulShutdownService>();
 
@@ -161,10 +165,12 @@ app.MapGet("/", () => "TorGames Server is running. REST API on :5001, gRPC on :5
 var clientManager = app.Services.GetRequiredService<ClientManager>();
 app.Lifetime.ApplicationStarted.Register(() =>
 {
+    var tcpPort = app.Configuration.GetValue("TcpInstaller:Port", 5050);
     Console.WriteLine("========================================");
     Console.WriteLine("  TorGames Server Started");
     Console.WriteLine("  gRPC listening on: http://0.0.0.0:5000");
     Console.WriteLine("  REST API on: http://0.0.0.0:5001");
+    Console.WriteLine($"  TCP Installer on: tcp://0.0.0.0:{tcpPort}");
     Console.WriteLine("  SignalR Hub: /hubs/clients");
     Console.WriteLine("  Max connections: 15,000");
     Console.WriteLine("  Press Ctrl+C to shutdown gracefully");

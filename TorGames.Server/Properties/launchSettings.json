@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "TorGames.Server": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:9573;http://localhost:9574"
+    }
+  }
+}

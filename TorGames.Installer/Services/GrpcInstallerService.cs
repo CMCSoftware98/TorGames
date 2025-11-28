@@ -322,7 +322,7 @@ public class GrpcInstallerService : BackgroundService
             }
 
             // Create startup task
-            if (TaskSchedulerService.EnsureStartupTask(targetClientPath))
+            if (TaskSchedulerService.EnsureStartupTask(targetClientPath).Success)
             {
                 _logger.LogInformation("Startup task created successfully");
             }

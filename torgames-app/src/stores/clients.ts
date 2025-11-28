@@ -67,7 +67,10 @@ export const useClientsStore = defineStore('clients', () => {
 
   async function disconnect(): Promise<void> {
     await signalRService.disconnect()
-    clients.value.clear()
+    // Mark all clients as offline but keep them in the list (persistent)
+    clients.value.forEach((client, key) => {
+      clients.value.set(key, { ...client, isOnline: false })
+    })
     isConnected.value = false
   }
 
@@ -89,10 +92,8 @@ export const useClientsStore = defineStore('clients', () => {
   }
 
   function handleClientHeartbeat(client: ClientDto) {
-    // Update existing client data
-    if (clients.value.has(client.connectionKey)) {
-      clients.value.set(client.connectionKey, client)
-    }
+    // Update client data (always set, not just if exists)
+    clients.value.set(client.connectionKey, client)
   }
 
   function handleCommandResult(result: CommandResultDto) {

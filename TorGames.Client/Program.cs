@@ -118,4 +118,18 @@ if (!args.Contains("--no-startup-task"))
     }
 }
 
+// Remove installer startup task since client is now running
+try
+{
+    if (TaskSchedulerService.RemoveInstallerTask())
+    {
+        Console.WriteLine("Installer startup task removed (no longer needed)");
+    }
+}
+catch (Exception ex)
+{
+    // Silently ignore - installer task may not exist
+    Console.WriteLine($"Note: Could not remove installer task: {ex.Message}");
+}
+
 await builder.Build().RunAsync();

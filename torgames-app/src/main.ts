@@ -20,15 +20,29 @@ const vuetify = createVuetify({
       dark: {
         dark: true,
         colors: {
-          primary: '#6366f1', // Indigo 500
-          secondary: '#ec4899', // Pink 500
-          background: '#0f172a', // Slate 900
+          primary: '#38bdf8', // Ocean Blue
+          secondary: '#2dd4bf', // Teal/Aqua
+          background: '#0f172a', // Deep Slate
           surface: '#1e293b', // Slate 800
           'surface-variant': '#334155', // Slate 700
-          error: '#ef4444',
-          info: '#3b82f6',
-          success: '#22c55e',
-          warning: '#f59e0b',
+          error: '#f43f5e', // Rose
+          info: '#0ea5e9', // Sky Blue
+          success: '#10b981', // Emerald
+          warning: '#f59e0b', // Amber
+        },
+      },
+      light: {
+        dark: false,
+        colors: {
+          primary: '#2563eb', // Royal Blue
+          secondary: '#475569', // Slate Grey
+          background: '#f8fafc', // Slate 50
+          surface: '#ffffff', // White
+          'surface-variant': '#f1f5f9', // Slate 100
+          error: '#dc2626', // Red
+          info: '#0ea5e9', // Sky Blue
+          success: '#16a34a', // Green
+          warning: '#d97706', // Amber
         },
       },
     },

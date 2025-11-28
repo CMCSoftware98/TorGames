@@ -19,12 +19,14 @@ public class ClientHub : Hub
     private readonly ClientManager _clientManager;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ClientHub> _logger;
+    private readonly TcpInstallerService? _tcpService;
 
-    public ClientHub(ClientManager clientManager, IServiceProvider serviceProvider, ILogger<ClientHub> logger)
+    public ClientHub(ClientManager clientManager, IServiceProvider serviceProvider, ILogger<ClientHub> logger, TcpInstallerService? tcpService = null)
     {
         _clientManager = clientManager;
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _tcpService = tcpService;
     }
 
     public override async Task OnConnectedAsync()
@@ -87,6 +89,7 @@ public class ClientHub : Hub
 
     /// <summary>
     /// Executes a command on a specific client.
+    /// Routes to TCP service if client is connected via TCP.
     /// </summary>
     public async Task<bool> ExecuteCommand(ExecuteCommandRequest request)
     {
@@ -104,6 +107,14 @@ public class ClientHub : Hub
             TimeoutSeconds = request.TimeoutSeconds
         };
 
+        // Check if this is a TCP client
+        if (_tcpService != null && _tcpService.IsTcpClient(request.ConnectionKey))
+        {
+            _logger.LogDebug("Routing command to TCP client: {ConnectionKey}", request.ConnectionKey);
+            return await _tcpService.SendCommandAsync(request.ConnectionKey, command);
+        }
+
+        // Fall back to gRPC client
         return await _clientManager.SendCommandAsync(request.ConnectionKey, command);
     }
 

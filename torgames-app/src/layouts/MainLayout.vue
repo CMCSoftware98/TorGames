@@ -9,6 +9,13 @@ const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const clientsStore = useClientsStore()
+import { useTheme } from 'vuetify'
+
+const theme = useTheme()
+
+function toggleTheme() {
+  theme.global.name.value = theme.global.current.value.dark ? 'light' : 'dark'
+}
 
 const drawer = ref(true)
 const rail = ref(false)
@@ -156,6 +163,14 @@ function toggleNotifications() {
           </div>
 
           <div class="d-flex align-center gap-2">
+            <v-btn
+              :icon="theme.global.current.value.dark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
+              variant="text"
+              color="primary"
+              class="glass-card mr-2"
+              @click="toggleTheme"
+            >
+            </v-btn>
              <v-btn
               :icon="settingsStore.notificationsEnabled ? 'mdi-bell-ring' : 'mdi-bell-off'"
               variant="text"
