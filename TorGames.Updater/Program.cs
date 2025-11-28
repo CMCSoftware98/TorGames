@@ -12,7 +12,7 @@ internal static class Program
 
     /// <summary>
     /// Entry point - crash-proof wrapper around the update logic.
-    /// Arguments: targetPath newFilePath backupDir parentPid
+    /// Arguments: targetPath newFilePath backupDir parentPid [version]
     /// </summary>
     public static int Main(string[] args)
     {
@@ -28,7 +28,7 @@ internal static class Program
             if (args.Length < 4)
             {
                 Log("ERROR: Insufficient arguments");
-                Log("Usage: TorGames.Updater.exe <targetPath> <newFilePath> <backupDir> <parentPid>");
+                Log("Usage: TorGames.Updater.exe <targetPath> <newFilePath> <backupDir> <parentPid> [version]");
                 return 1;
             }
 
@@ -42,8 +42,15 @@ internal static class Program
                 return 1;
             }
 
+            // Version is optional 5th argument
+            var version = args.Length > 4 ? args[4] : null;
+            if (!string.IsNullOrEmpty(version))
+            {
+                Log($"Target version: {version}");
+            }
+
             // Run the update process
-            return RunUpdate(targetPath, newFilePath, backupDir, parentPid);
+            return RunUpdate(targetPath, newFilePath, backupDir, parentPid, version);
         }
         catch (Exception ex)
         {
@@ -53,7 +60,7 @@ internal static class Program
         }
     }
 
-    private static int RunUpdate(string targetPath, string newFilePath, string backupDir, int parentPid)
+    private static int RunUpdate(string targetPath, string newFilePath, string backupDir, int parentPid, string? version)
     {
         string? backupPath = null;
 
@@ -139,9 +146,12 @@ internal static class Program
             Log("Step 6: Cleaning up old backups...");
             CleanupOldBackups(backupDir, keepCount: 3);
 
-            // Step 7: Start new client with --post-update flag
+            // Step 7: Start new client with --post-update flag and version
             Log("Step 7: Starting updated client...");
-            if (!StartProcess(targetPath, "--post-update"))
+            var clientArgs = string.IsNullOrEmpty(version)
+                ? "--post-update"
+                : $"--post-update --version \"{version}\"";
+            if (!StartProcess(targetPath, clientArgs))
             {
                 Log("WARNING: Failed to start updated client");
                 // Don't return error - the update itself was successful

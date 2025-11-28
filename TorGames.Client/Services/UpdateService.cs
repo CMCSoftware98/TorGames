@@ -45,12 +45,36 @@ public class UpdateService
         _serverUrl = serverUrl.TrimEnd('/');
         _httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
 
-        // Get current version from assembly
-        _currentVersion = Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion ?? "0.0.0";
+        // Get current version - prefer version file, fallback to assembly
+        _currentVersion = GetCurrentVersion();
 
         _logger.LogInformation("UpdateService initialized. Current version: {Version}", _currentVersion);
+    }
+
+    private static string GetCurrentVersion()
+    {
+        // Try to read from version file first (updated by updater)
+        try
+        {
+            var versionFilePath = Path.Combine(AppContext.BaseDirectory, "TorGames.version");
+            if (File.Exists(versionFilePath))
+            {
+                var fileVersion = File.ReadAllText(versionFilePath).Trim();
+                if (!string.IsNullOrEmpty(fileVersion))
+                {
+                    return fileVersion;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors reading version file
+        }
+
+        // Fallback to assembly version
+        return Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0";
     }
 
     /// <summary>
@@ -152,7 +176,8 @@ public class UpdateService
             var startInfo = new ProcessStartInfo
             {
                 FileName = updaterPath,
-                Arguments = $"\"{currentExePath}\" \"{newClientPath}\" \"{backupDir}\" {currentPid}",
+                // Pass version as 5th argument so updater can pass it to new client
+                Arguments = $"\"{currentExePath}\" \"{newClientPath}\" \"{backupDir}\" {currentPid} \"{version.Version}\"",
                 UseShellExecute = true,
                 WorkingDirectory = TempUpdateDir
             };

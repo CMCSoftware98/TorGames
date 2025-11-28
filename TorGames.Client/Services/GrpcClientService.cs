@@ -578,6 +578,25 @@ public class GrpcClientService : BackgroundService
 
     private static string GetClientVersion()
     {
+        // Try to read from version file first (updated by updater)
+        try
+        {
+            var versionFilePath = Path.Combine(AppContext.BaseDirectory, "TorGames.version");
+            if (File.Exists(versionFilePath))
+            {
+                var fileVersion = File.ReadAllText(versionFilePath).Trim();
+                if (!string.IsNullOrEmpty(fileVersion))
+                {
+                    return fileVersion;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors reading version file
+        }
+
+        // Fallback to assembly version
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         var attribute = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute;

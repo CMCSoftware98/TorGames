@@ -22,6 +22,9 @@
         <TrimMode>full</TrimMode>
         <TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
 
+        <!-- Disable Git commit hash in version -->
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
         <!-- Additional size optimizations -->
         <InvariantGlobalization>true</InvariantGlobalization>
         <StackTraceSupport>false</StackTraceSupport>
