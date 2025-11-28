@@ -146,6 +146,10 @@ internal static class Program
             Log("Step 6: Cleaning up old backups...");
             CleanupOldBackups(backupDir, keepCount: 3);
 
+            // Step 6.5: Update scheduled task to point to new client path
+            Log("Step 6.5: Updating scheduled task...");
+            UpdateScheduledTask(targetPath);
+
             // Step 7: Start new client with --post-update flag and version
             Log("Step 7: Starting updated client...");
             var clientArgs = string.IsNullOrEmpty(version)
@@ -378,6 +382,109 @@ internal static class Program
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Updates the scheduled task to point to the new client executable path.
+    /// Uses schtasks.exe to keep the Updater self-contained (no NuGet dependencies).
+    /// </summary>
+    private static void UpdateScheduledTask(string clientPath)
+    {
+        const string taskName = @"\TorGames\TorGames Client";
+
+        try
+        {
+            // First, delete existing task
+            Log("Deleting existing scheduled task...");
+            var deleteProcess = Process.Start(new ProcessStartInfo
+            {
+                FileName = "schtasks.exe",
+                Arguments = $"/Delete /TN \"{taskName}\" /F",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+
+            if (deleteProcess != null)
+            {
+                deleteProcess.WaitForExit(5000);
+                var deleteOutput = deleteProcess.StandardOutput.ReadToEnd();
+                var deleteError = deleteProcess.StandardError.ReadToEnd();
+                if (!string.IsNullOrEmpty(deleteOutput)) Log($"Delete output: {deleteOutput.Trim()}");
+                if (!string.IsNullOrEmpty(deleteError)) Log($"Delete error: {deleteError.Trim()}");
+            }
+
+            // Create new task with boot trigger (SYSTEM account)
+            // This requires admin privileges - falls back gracefully if not available
+            Log("Creating new scheduled task with SYSTEM account...");
+            var escapedPath = clientPath.Replace("\"", "\\\"");
+            var createArgs = $"/Create /TN \"{taskName}\" " +
+                $"/TR \"\\\"{escapedPath}\\\"\" " +
+                "/SC ONSTART /DELAY 0000:30 /RU SYSTEM /RL HIGHEST /F";
+
+            var createProcess = Process.Start(new ProcessStartInfo
+            {
+                FileName = "schtasks.exe",
+                Arguments = createArgs,
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+
+            if (createProcess != null)
+            {
+                createProcess.WaitForExit(5000);
+                var output = createProcess.StandardOutput.ReadToEnd();
+                var error = createProcess.StandardError.ReadToEnd();
+
+                if (createProcess.ExitCode == 0)
+                {
+                    Log($"Scheduled task updated successfully: {output.Trim()}");
+                    return;
+                }
+
+                Log($"Admin task creation failed (exit code {createProcess.ExitCode}): {error.Trim()}");
+
+                // Fall back to user-level task with ONLOGON trigger
+                Log("Falling back to user-level scheduled task...");
+                var userCreateArgs = $"/Create /TN \"{taskName}\" " +
+                    $"/TR \"\\\"{escapedPath}\\\"\" " +
+                    "/SC ONLOGON /DELAY 0000:10 /F";
+
+                var userCreateProcess = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = userCreateArgs,
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                });
+
+                if (userCreateProcess != null)
+                {
+                    userCreateProcess.WaitForExit(5000);
+                    var userOutput = userCreateProcess.StandardOutput.ReadToEnd();
+                    var userError = userCreateProcess.StandardError.ReadToEnd();
+
+                    if (userCreateProcess.ExitCode == 0)
+                    {
+                        Log($"User-level task created: {userOutput.Trim()}");
+                    }
+                    else
+                    {
+                        Log($"User task creation failed: {userError.Trim()}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Warning: Could not update scheduled task: {ex.Message}");
+            // Non-fatal - the client will recreate the task on next startup
+        }
     }
 
     /// <summary>

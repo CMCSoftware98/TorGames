@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TorGames.Common.Hardware;
 using TorGames.Common.Protos;
+using TorGames.Common.Services;
 
 namespace TorGames.Installer.Services;
 
@@ -264,28 +265,193 @@ public class GrpcInstallerService : BackgroundService
         await SendCommandResultAsync(result, ct);
     }
 
-    private Task<CommandResult> HandleInstallCommandAsync(Command command)
+    private async Task<CommandResult> HandleInstallCommandAsync(Command command)
     {
         _logger.LogInformation("Processing install command");
-        // TODO: Implement installation logic
-        return Task.FromResult(new CommandResult
+
+        var result = new CommandResult
         {
             CommandId = command.CommandId,
-            Success = true,
-            Stdout = "Installation completed successfully"
-        });
+            Success = false
+        };
+
+        try
+        {
+            // Parse install parameters from command
+            // Expected format: install <source_path> [target_path]
+            var parts = command.CommandText?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+            string sourcePath;
+            string targetDir;
+
+            if (parts.Length >= 1)
+            {
+                sourcePath = parts[0];
+            }
+            else
+            {
+                result.ErrorMessage = "Missing source path in install command";
+                return result;
+            }
+
+            // Default target directory
+            targetDir = parts.Length >= 2
+                ? parts[1]
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "TorGames");
+
+            // Ensure target directory exists
+            if (!Directory.Exists(targetDir))
+            {
+                Directory.CreateDirectory(targetDir);
+                _logger.LogInformation("Created installation directory: {Dir}", targetDir);
+            }
+
+            // Target client path
+            var targetClientPath = Path.Combine(targetDir, "TorGames.Client.exe");
+
+            // Copy client to installation directory
+            if (File.Exists(sourcePath))
+            {
+                File.Copy(sourcePath, targetClientPath, overwrite: true);
+                _logger.LogInformation("Copied client to: {Path}", targetClientPath);
+            }
+            else
+            {
+                result.ErrorMessage = $"Source file not found: {sourcePath}";
+                return result;
+            }
+
+            // Create startup task
+            if (TaskSchedulerService.EnsureStartupTask(targetClientPath))
+            {
+                _logger.LogInformation("Startup task created successfully");
+            }
+            else
+            {
+                _logger.LogWarning("Could not create startup task (non-fatal)");
+            }
+
+            // Launch client
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = targetClientPath,
+                    UseShellExecute = true,
+                    WorkingDirectory = targetDir
+                });
+                _logger.LogInformation("Client launched");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not launch client (non-fatal)");
+            }
+
+            result.Success = true;
+            result.Stdout = $"Installation completed successfully to {targetDir}";
+        }
+        catch (Exception ex)
+        {
+            result.ErrorMessage = $"Installation failed: {ex.Message}";
+            _logger.LogError(ex, "Installation failed");
+        }
+
+        return await Task.FromResult(result);
     }
 
-    private Task<CommandResult> HandleUninstallCommandAsync(Command command)
+    private async Task<CommandResult> HandleUninstallCommandAsync(Command command)
     {
         _logger.LogInformation("Processing uninstall command");
-        // TODO: Implement uninstallation logic
-        return Task.FromResult(new CommandResult
+
+        var result = new CommandResult
         {
             CommandId = command.CommandId,
-            Success = true,
-            Stdout = "Uninstallation completed successfully"
-        });
+            Success = false
+        };
+
+        try
+        {
+            // Parse target path from command (optional)
+            var targetDir = command.CommandText?.Trim();
+            if (string.IsNullOrEmpty(targetDir))
+            {
+                targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "TorGames");
+            }
+
+            var clientPath = Path.Combine(targetDir, "TorGames.Client.exe");
+
+            // Step 1: Remove startup task
+            _logger.LogInformation("Removing scheduled task...");
+            if (TaskSchedulerService.RemoveTask())
+            {
+                _logger.LogInformation("Scheduled task removed successfully");
+            }
+            else
+            {
+                _logger.LogWarning("Could not remove scheduled task (may not exist)");
+            }
+
+            // Step 2: Stop client process
+            _logger.LogInformation("Stopping client processes...");
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName("TorGames.Client"))
+                {
+                    try
+                    {
+                        proc.Kill(true);
+                        proc.WaitForExit(5000);
+                        _logger.LogInformation("Killed client process: {PID}", proc.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not kill process {PID}", proc.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error stopping client processes");
+            }
+
+            // Give processes time to fully terminate
+            await Task.Delay(1000);
+
+            // Step 3: Delete files
+            _logger.LogInformation("Deleting files from {Dir}...", targetDir);
+            if (Directory.Exists(targetDir))
+            {
+                try
+                {
+                    Directory.Delete(targetDir, recursive: true);
+                    _logger.LogInformation("Deleted installation directory");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not delete directory (files may be in use)");
+                    // Try deleting individual files
+                    if (File.Exists(clientPath))
+                    {
+                        try
+                        {
+                            File.Delete(clientPath);
+                            _logger.LogInformation("Deleted client executable");
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            result.Success = true;
+            result.Stdout = $"Uninstallation completed successfully from {targetDir}";
+        }
+        catch (Exception ex)
+        {
+            result.ErrorMessage = $"Uninstallation failed: {ex.Message}";
+            _logger.LogError(ex, "Uninstallation failed");
+        }
+
+        return result;
     }
 
     private Task<CommandResult> HandleUpdateCommandAsync(Command command)

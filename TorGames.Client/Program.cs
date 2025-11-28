@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TorGames.Client.Services;
+using TorGames.Common.Services;
 
 // Version file path - next to the executable
 var exePath = AppContext.BaseDirectory;
@@ -77,5 +78,28 @@ builder.Services.AddHostedService<GrpcClientService>();
 Console.WriteLine($"TorGames Client v{version} starting...");
 Console.WriteLine($"Connecting to server: {serverAddress}");
 Console.WriteLine("Press Ctrl+C to exit");
+
+// Ensure startup task exists (runs at boot/logon)
+if (!args.Contains("--no-startup-task"))
+{
+    try
+    {
+        var clientExePath = Environment.ProcessPath ??
+            Path.Combine(AppContext.BaseDirectory, "TorGames.Client.exe");
+
+        if (TaskSchedulerService.EnsureStartupTask(clientExePath))
+        {
+            Console.WriteLine("Startup task configured successfully");
+        }
+        else
+        {
+            Console.WriteLine("Note: Could not configure startup task (non-fatal)");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Note: Startup task configuration failed: {ex.Message}");
+    }
+}
 
 await builder.Build().RunAsync();
