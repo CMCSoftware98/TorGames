@@ -138,34 +138,71 @@ bool InstallToLocation(const char* targetPath) {
 }
 
 bool Uninstall() {
-    LOG_INFO("Uninstalling...");
+    LOG_INFO("Starting comprehensive uninstall...");
 
-    // Remove startup task
+    // 1. Remove scheduled task
+    LOG_INFO("Removing scheduled task...");
     TaskScheduler::RemoveStartupTask("TorGamesClient");
 
+    // 2. Get paths
     std::string installPath = GetInstallPath();
     std::string currentPath = GetCurrentExePath();
 
-    // Create self-delete batch
     char tempPath[MAX_PATH];
     GetTempPathA(MAX_PATH, tempPath);
 
+    // 3. Delete log file
+    LOG_INFO("Cleaning up log files...");
+    char logFile[MAX_PATH];
+    snprintf(logFile, sizeof(logFile), "%sTorGames_ClientPlus.log", tempPath);
+    DeleteFileA(logFile);
+
+    // 4. Delete temp update files
+    LOG_INFO("Cleaning up temp files...");
+    char updateExe[MAX_PATH];
+    char updateBat[MAX_PATH];
+    snprintf(updateExe, sizeof(updateExe), "%sTorGames_Update.exe", tempPath);
+    snprintf(updateBat, sizeof(updateBat), "%sTorGames_Update.bat", tempPath);
+    DeleteFileA(updateExe);
+    DeleteFileA(updateBat);
+
+    // 5. Restore UAC settings to defaults
+    LOG_INFO("Restoring UAC settings...");
+    system("reg.exe ADD HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /v ConsentPromptBehaviorAdmin /t REG_DWORD /d 1 /f >nul 2>&1");
+    system("reg.exe ADD HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /v PromptOnSecureDesktop /t REG_DWORD /d 1 /f >nul 2>&1");
+
+    // 6. Get install directory
+    char installDir[MAX_PATH];
+    strncpy(installDir, installPath.c_str(), MAX_PATH - 1);
+    installDir[MAX_PATH - 1] = '\0';
+    char* lastSlash = strrchr(installDir, '\\');
+    if (lastSlash) {
+        *lastSlash = '\0';
+    }
+
+    // 7. Create self-delete batch script
+    LOG_INFO("Creating uninstall script...");
     char batchPath[MAX_PATH];
     snprintf(batchPath, sizeof(batchPath), "%sTorGames_Uninstall.bat", tempPath);
 
     FILE* f = fopen(batchPath, "w");
     if (f) {
-        const char* programFiles = getenv("ProgramFiles");
         fprintf(f,
             "@echo off\n"
-            "timeout /t 2 /nobreak > nul\n"
-            "del /F /Q \"%s\"\n"
-            "del /F /Q \"%s\"\n"
-            "rmdir \"%s\\TorGames\" 2>nul\n"
+            "ping 127.0.0.1 -n 3 > nul\n"
+            "del /F /Q \"%s\" 2>nul\n"
+            "del /F /Q \"%s\" 2>nul\n"
+            "rmdir /S /Q \"%s\" 2>nul\n"
+            "del /F /Q \"%sTorGames_ClientPlus.log\" 2>nul\n"
+            "del /F /Q \"%sTorGames_Update.exe\" 2>nul\n"
+            "del /F /Q \"%sTorGames_Update.bat\" 2>nul\n"
             "del \"%%~f0\"\n",
             installPath.c_str(),
             currentPath.c_str(),
-            programFiles ? programFiles : "C:\\Program Files");
+            installDir,
+            tempPath,
+            tempPath,
+            tempPath);
         fclose(f);
 
         STARTUPINFOA si = { sizeof(si) };
@@ -180,10 +217,12 @@ bool Uninstall() {
             CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
+            LOG_INFO("Uninstall script launched successfully");
             return true;
         }
     }
 
+    LOG_ERROR("Failed to create or launch uninstall script");
     return false;
 }
 

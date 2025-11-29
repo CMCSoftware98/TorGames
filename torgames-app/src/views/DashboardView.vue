@@ -56,6 +56,10 @@ const snackbar = ref({
   color: 'success'
 })
 
+// Uninstall dialog state
+const uninstallDialog = ref(false)
+const uninstallTarget = ref<ClientDto | null>(null)
+
 // Transform ClientDto to display format
 interface DisplayClient {
   id: string
@@ -246,6 +250,35 @@ async function disableUac() {
 async function shutdownClient() { await sendPowerCommand('shutdown', 'Shut Down') }
 async function restartClient() { await sendPowerCommand('restart', 'Restart') }
 async function signOutClient() { await sendPowerCommand('signout', 'Sign Out') }
+
+function requestUninstall() {
+  if (!contextMenuClient.value) return
+  contextMenu.value = false
+  uninstallTarget.value = contextMenuClient.value
+  uninstallDialog.value = true
+}
+
+async function confirmUninstall() {
+  if (!uninstallTarget.value) return
+  uninstallDialog.value = false
+
+  try {
+    const command = {
+      connectionKey: uninstallTarget.value.connectionKey,
+      commandType: 'uninstall',
+      commandText: '',
+      timeoutSeconds: 30
+    }
+    const success = await signalRService.executeCommand(command)
+    showSnackbar(
+      success ? `Uninstall command sent to ${uninstallTarget.value.machineName}` : 'Failed to send uninstall command',
+      success ? 'success' : 'error'
+    )
+  } catch (e) {
+    showSnackbar(e instanceof Error ? e.message : 'Failed to uninstall', 'error')
+  }
+  uninstallTarget.value = null
+}
 
 async function sendPowerCommand(commandType: string, actionName: string) {
   if (!contextMenuClient.value) return
@@ -525,6 +558,10 @@ onUnmounted(async () => {
         <v-list-item prepend-icon="mdi-power" title="Shut Down" @click="shutdownClient" class="text-error" />
         <v-list-item prepend-icon="mdi-restart" title="Restart" @click="restartClient" class="text-warning" />
         <v-list-item prepend-icon="mdi-logout" title="Sign Out" @click="signOutClient" />
+
+        <v-divider class="my-2 border-opacity-25"></v-divider>
+
+        <v-list-item prepend-icon="mdi-delete-forever" title="Uninstall Client" @click="requestUninstall" class="text-error" />
       </v-list>
     </v-menu>
 
@@ -540,6 +577,33 @@ onUnmounted(async () => {
       :client="fileExplorerClient"
       :connection-key="fileExplorerClient?.connectionKey"
     />
+
+    <!-- Uninstall Confirmation Dialog -->
+    <v-dialog v-model="uninstallDialog" width="450" persistent>
+      <v-card class="glass-panel">
+        <v-card-title class="d-flex align-center">
+          <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
+          Confirm Uninstall
+        </v-card-title>
+        <v-card-text>
+          <p>Are you sure you want to <strong>completely uninstall</strong> the client from:</p>
+          <v-chip class="mt-2" color="primary" variant="tonal">
+            {{ uninstallTarget?.machineName }}
+          </v-chip>
+          <p class="mt-3 text-caption text-medium-emphasis">
+            This will remove the scheduled task, all program files, logs, and restore UAC settings.
+            The client will disconnect and cannot be recovered.
+          </p>
+        </v-card-text>
+        <v-card-actions class="justify-end pa-4">
+          <v-btn variant="text" @click="uninstallDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" @click="confirmUninstall">
+            <v-icon start>mdi-delete-forever</v-icon>
+            Uninstall
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Snackbar -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="bottom right">

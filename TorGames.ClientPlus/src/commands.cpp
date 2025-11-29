@@ -271,12 +271,10 @@ CommandResult HandleRestart(const char* payload) {
 }
 
 CommandResult HandleUninstall(const char* payload) {
-    LOG_INFO("Uninstalling...");
+    LOG_INFO("Uninstall command received");
     bool success = Updater::Uninstall();
-    if (success) {
-        ExitProcess(0);
-    }
-    return { success, success ? "Uninstalling" : "Uninstall failed" };
+    // Return with shouldExit=true so client exits after sending response
+    return { success, success ? "Uninstall initiated successfully" : "Uninstall failed", success };
 }
 
 CommandResult HandleUpdate(const char* payload) {
