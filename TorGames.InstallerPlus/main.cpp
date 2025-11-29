@@ -578,19 +578,9 @@ CmdResult DoDownloadAndRun(const char* url, const char* targetDir) {
         snprintf(target, sizeof(target), "%s\\TorGames", pf);
     }
 
-    // Create directory (and parent directories if needed)
-    char parentDir[MAX_PATH];
-    strcpy(parentDir, target);
-
-    // Create all parent directories
-    for (char* p = parentDir + 3; *p; p++) {  // Skip "C:\"
-        if (*p == '\\' || *p == '/') {
-            *p = '\0';
-            CreateDirectoryA(parentDir, NULL);
-            *p = '\\';
-        }
-    }
+    // Create directory
     CreateDirectoryA(target, NULL);
+    Log("Install directory: %s", target);
 
     // Determine filename from URL or use default
     const char* filename = strrchr(url, '/');
