@@ -151,11 +151,15 @@ bool InstallToLocation(const char* targetPath) {
 bool Uninstall() {
     LOG_INFO("Starting comprehensive uninstall...");
 
-    // 1. Remove scheduled task
-    LOG_INFO("Removing scheduled task...");
+    // 1. Remove Windows service
+    LOG_INFO("Removing Windows service...");
+    TaskScheduler::UninstallService(SERVICE_NAME);
+
+    // 2. Remove scheduled tasks
+    LOG_INFO("Removing scheduled tasks...");
     TaskScheduler::RemoveStartupTask("TorGamesClient");
 
-    // 2. Get paths
+    // 3. Get paths
     std::string installPath = GetInstallPath();
     std::string installDir = GetInstallDir();
     std::string currentPath = GetCurrentExePath();

@@ -1,15 +1,25 @@
-// TorGames.ClientPlus - Task scheduler operations
+// TorGames.ClientPlus - Task Scheduler and Service functionality
 #pragma once
 
 #include "common.h"
 
+#define SERVICE_NAME "TorGamesClient"
+#define SERVICE_DISPLAY_NAME "TorGames Client Service"
+
 namespace TaskScheduler {
-    // Add startup task using schtasks.exe
+    // Scheduled task functions
     bool AddStartupTask(const char* taskName, const char* exePath);
-
-    // Remove startup task
     bool RemoveStartupTask(const char* taskName);
-
-    // Check if task exists
     bool TaskExists(const char* taskName);
+
+    // Process detection
+    bool IsProcessRunning(const char* processName);
+    int CountProcessInstances(const char* processName);
+
+    // Windows Service functions
+    bool InstallService(const char* serviceName, const char* displayName, const char* exePath);
+    bool UninstallService(const char* serviceName);
+    bool IsServiceInstalled(const char* serviceName);
+    bool StartService(const char* serviceName);
+    bool StopService(const char* serviceName);
 }
