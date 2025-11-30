@@ -211,11 +211,11 @@ using (var scope = app.Services.CreateScope())
                     await addColumnCmd.ExecuteNonQueryAsync();
                 }
 
-                // Mark the migration as applied
+                // Mark the InitialCreate migration as applied (since tables already exist)
                 using var insertCmd = connection.CreateCommand();
                 insertCmd.CommandText = @"
                     INSERT OR IGNORE INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
-                    VALUES ('20251130225506_AddIsTestModeToClient', '10.0.0')";
+                    VALUES ('20251130000000_InitialCreate', '10.0.0')";
                 await insertCmd.ExecuteNonQueryAsync();
 
                 logger.LogInformation("Database migrations initialized");
