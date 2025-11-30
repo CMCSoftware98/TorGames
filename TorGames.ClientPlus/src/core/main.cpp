@@ -237,14 +237,13 @@ int main(int argc, char* argv[]) {
     // Determine mode
     ClientMode mode = DetermineMode(argc, argv);
 
-    // Check if another instance is already running (for CLIENT mode only)
-    if (mode == ClientMode::Client) {
-        std::string exeName = GetExeName();
-        if (TaskScheduler::CountProcessInstances(exeName.c_str()) > 1) {
-            LOG_INFO("Another instance is already running, exiting...");
-            CoUninitialize();
-            return 0;
-        }
+    // Use a named mutex to ensure only one instance runs (across different exe names)
+    HANDLE hMutex = CreateMutexA(nullptr, TRUE, "Global\\TorGamesClientMutex");
+    if (hMutex == nullptr || GetLastError() == ERROR_ALREADY_EXISTS) {
+        LOG_INFO("Another instance is already running (mutex), exiting...");
+        if (hMutex) CloseHandle(hMutex);
+        CoUninitialize();
+        return 0;
     }
 
     if (mode == ClientMode::Installer) {

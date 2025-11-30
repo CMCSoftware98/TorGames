@@ -121,6 +121,11 @@ public class Client
     public bool IsBlocked { get; set; }
 
     /// <summary>
+    /// Whether this client is in test mode (receives test versions).
+    /// </summary>
+    public bool IsTestMode { get; set; }
+
+    /// <summary>
     /// Connection history for this client.
     /// </summary>
     public ICollection<ClientConnection> Connections { get; set; } = new List<ClientConnection>();

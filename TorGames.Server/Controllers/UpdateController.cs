@@ -55,14 +55,25 @@ public class UpdateController : ControllerBase
     /// <summary>
     /// Checks if an update is available for the given version.
     /// </summary>
+    /// <param name="currentVersion">The client's current version</param>
+    /// <param name="clientId">Optional client ID to check if client is in test mode</param>
     [HttpGet("check")]
     [AllowAnonymous]
-    public ActionResult<UpdateCheckResponse> CheckForUpdate([FromQuery] string currentVersion)
+    public async Task<ActionResult<UpdateCheckResponse>> CheckForUpdate(
+        [FromQuery] string currentVersion,
+        [FromQuery] string? clientId = null)
     {
         if (string.IsNullOrWhiteSpace(currentVersion))
             return BadRequest("currentVersion is required");
 
-        var response = _updateService.CheckForUpdate(currentVersion);
+        // Check if the client is in test mode
+        bool isTestClient = false;
+        if (!string.IsNullOrWhiteSpace(clientId))
+        {
+            isTestClient = await _clientManager.IsClientInTestModeAsync(clientId);
+        }
+
+        var response = _updateService.CheckForUpdate(currentVersion, isTestClient);
         return Ok(response);
     }
 
@@ -124,12 +135,16 @@ public class UpdateController : ControllerBase
     /// Uploads a new version of the client.
     /// Version is automatically extracted from the executable's assembly metadata.
     /// </summary>
+    /// <param name="file">The executable file</param>
+    /// <param name="releaseNotes">Optional release notes</param>
+    /// <param name="isTestVersion">Whether this is a test version (default: false)</param>
     [HttpPost("upload")]
     [Authorize]
     [RequestSizeLimit(200_000_000)] // 200MB max
     public async Task<ActionResult<VersionInfo>> UploadVersion(
         [FromForm] IFormFile file,
-        [FromForm] string? releaseNotes)
+        [FromForm] string? releaseNotes,
+        [FromForm] bool isTestVersion = false)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file provided");
@@ -154,13 +169,15 @@ public class UpdateController : ControllerBase
                 return BadRequest("Could not extract version from executable. Ensure the client was built with proper version metadata (format: YYYY.MM.DD.HHMM)");
             }
 
-            _logger.LogInformation("Extracted version from uploaded file: {Version}", extractedVersion);
+            _logger.LogInformation("Extracted version from uploaded file: {Version} (test: {IsTest})", extractedVersion, isTestVersion);
 
-            // Validate version is higher than existing
-            if (!_updateService.IsValidNewVersion(extractedVersion))
+            // Validate version is higher than existing versions of the same type
+            if (!_updateService.IsValidNewVersion(extractedVersion, isTestVersion))
             {
-                var latestVersion = _updateService.GetLatestVersion()?.Version ?? "none";
-                return BadRequest($"Version {extractedVersion} is not higher than the latest version ({latestVersion}). Build a newer version of the client.");
+                var latestVersion = isTestVersion
+                    ? _updateService.GetLatestTestVersion()?.Version ?? "none"
+                    : _updateService.GetLatestVersion()?.Version ?? "none";
+                return BadRequest($"Version {extractedVersion} is not higher than the latest {(isTestVersion ? "test" : "production")} version ({latestVersion}). Build a newer version of the client.");
             }
 
             // Add version using temp file
@@ -169,34 +186,66 @@ public class UpdateController : ControllerBase
                 fileStream,
                 extractedVersion,
                 releaseNotes ?? string.Empty,
-                User.Identity?.Name ?? "Unknown");
+                User.Identity?.Name ?? "Unknown",
+                isTestVersion);
 
-            _logger.LogInformation("Version {Version} uploaded successfully", extractedVersion);
+            _logger.LogInformation("{Type} version {Version} uploaded successfully",
+                isTestVersion ? "Test" : "Production", extractedVersion);
 
-            // Notify all connected clients about the new update
-            _ = Task.Run(async () =>
+            // Only notify clients for production versions (test versions are targeted)
+            if (!isTestVersion)
             {
-                try
+                _ = Task.Run(async () =>
                 {
-                    var updateCommand = new Command
+                    try
                     {
-                        CommandId = Guid.NewGuid().ToString(),
-                        CommandType = "update_available",
-                        CommandText = extractedVersion,
-                        TimeoutSeconds = 0
-                    };
+                        var updateCommand = new Command
+                        {
+                            CommandId = Guid.NewGuid().ToString(),
+                            CommandType = "update_available",
+                            CommandText = extractedVersion,
+                            TimeoutSeconds = 0
+                        };
 
-                    var clientCount = await _clientManager.BroadcastCommandToAllAsync(updateCommand);
-                    _logger.LogInformation(
-                        "Notified {ClientCount} clients about new version {Version}",
-                        clientCount,
-                        extractedVersion);
-                }
-                catch (Exception ex)
+                        var clientCount = await _clientManager.BroadcastCommandToAllAsync(updateCommand);
+                        _logger.LogInformation(
+                            "Notified {ClientCount} clients about new version {Version}",
+                            clientCount,
+                            extractedVersion);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to notify clients about new update");
+                    }
+                });
+            }
+            else
+            {
+                // For test versions, notify only test clients
+                _ = Task.Run(async () =>
                 {
-                    _logger.LogWarning(ex, "Failed to notify clients about new update");
-                }
-            });
+                    try
+                    {
+                        var updateCommand = new Command
+                        {
+                            CommandId = Guid.NewGuid().ToString(),
+                            CommandType = "update_available",
+                            CommandText = extractedVersion,
+                            TimeoutSeconds = 0
+                        };
+
+                        var clientCount = await _clientManager.BroadcastCommandToTestClientsAsync(updateCommand);
+                        _logger.LogInformation(
+                            "Notified {ClientCount} test clients about new test version {Version}",
+                            clientCount,
+                            extractedVersion);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to notify test clients about new update");
+                    }
+                });
+            }
 
             return Ok(versionInfo);
         }

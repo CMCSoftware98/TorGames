@@ -11,6 +11,11 @@ public class VersionInfo
     public DateTime UploadedAt { get; set; }
     public string ReleaseNotes { get; set; } = string.Empty;
     public string UploadedBy { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether this is a test version (only deployed to clients in test mode).
+    /// </summary>
+    public bool IsTestVersion { get; set; }
 }
 
 /// <summary>
@@ -19,6 +24,12 @@ public class VersionInfo
 public class VersionManifest
 {
     public string LatestVersion { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The latest test version (for clients in test mode).
+    /// </summary>
+    public string LatestTestVersion { get; set; } = string.Empty;
+
     public List<VersionInfo> Versions { get; set; } = new();
 }
 

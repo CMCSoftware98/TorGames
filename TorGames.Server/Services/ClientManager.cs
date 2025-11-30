@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using TorGames.Common.Protos;
+using TorGames.Database.Services;
 using TorGames.Server.Models;
 using Command = TorGames.Common.Protos.Command;
 
@@ -38,6 +39,7 @@ public class ClientManager
 {
     private readonly ConcurrentDictionary<string, ConnectedClient> _clients = new();
     private readonly ILogger<ClientManager> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     // Events for SignalR hub to subscribe to
     public event EventHandler<ClientEventArgs>? ClientConnected;
@@ -46,9 +48,10 @@ public class ClientManager
     public event EventHandler<CommandResultEventArgs>? CommandResultReceived;
     public event EventHandler<DetailedSystemInfoEventArgs>? DetailedSystemInfoReceived;
 
-    public ClientManager(ILogger<ClientManager> logger)
+    public ClientManager(ILogger<ClientManager> logger, IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     /// <summary>
@@ -338,5 +341,49 @@ public class ClientManager
         }
 
         _logger.LogInformation("All clients disconnected");
+    }
+
+    /// <summary>
+    /// Checks if a client is in test mode by looking up the database.
+    /// </summary>
+    public async Task<bool> IsClientInTestModeAsync(string clientId)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ClientRepository>();
+            return await repository.IsClientInTestModeAsync(clientId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to check test mode for client {ClientId}", clientId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Sends a command to all clients that are in test mode.
+    /// </summary>
+    public async Task<int> BroadcastCommandToTestClientsAsync(Command command)
+    {
+        var clients = _clients.Values.ToList();
+        var successCount = 0;
+
+        foreach (var client in clients)
+        {
+            // Check if this client is in test mode
+            if (await IsClientInTestModeAsync(client.ClientId))
+            {
+                if (await client.SendCommandAsync(command))
+                    successCount++;
+            }
+        }
+
+        _logger.LogInformation(
+            "Broadcast command {CommandType} to test clients: {Success} clients",
+            command.CommandType,
+            successCount);
+
+        return successCount;
     }
 }

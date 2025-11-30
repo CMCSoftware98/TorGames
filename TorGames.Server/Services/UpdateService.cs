@@ -138,7 +138,7 @@ public class UpdateService
     }
 
     /// <summary>
-    /// Gets the latest version info.
+    /// Gets the latest version info (production only).
     /// </summary>
     public VersionInfo? GetLatestVersion()
     {
@@ -150,23 +150,48 @@ public class UpdateService
     }
 
     /// <summary>
+    /// Gets the latest test version info.
+    /// </summary>
+    public VersionInfo? GetLatestTestVersion()
+    {
+        var manifest = LoadManifest();
+        if (string.IsNullOrEmpty(manifest.LatestTestVersion))
+            return null;
+
+        return manifest.Versions.FirstOrDefault(v => v.Version == manifest.LatestTestVersion);
+    }
+
+    /// <summary>
     /// Checks if an update is available for the given version.
     /// </summary>
-    public UpdateCheckResponse CheckForUpdate(string currentVersion)
+    /// <param name="currentVersion">The client's current version</param>
+    /// <param name="isTestClient">Whether the client is in test mode</param>
+    public UpdateCheckResponse CheckForUpdate(string currentVersion, bool isTestClient = false)
     {
-        var latest = GetLatestVersion();
-        if (latest == null)
+        VersionInfo? targetVersion;
+
+        if (isTestClient)
+        {
+            // Test clients get the latest test version if available, otherwise fall back to production
+            targetVersion = GetLatestTestVersion() ?? GetLatestVersion();
+        }
+        else
+        {
+            targetVersion = GetLatestVersion();
+        }
+
+        if (targetVersion == null)
         {
             return new UpdateCheckResponse { UpdateAvailable = false };
         }
 
         var current = ParseVersion(currentVersion);
-        var latestVer = ParseVersion(latest.Version);
+        var latestVer = ParseVersion(targetVersion.Version);
 
         return new UpdateCheckResponse
         {
             UpdateAvailable = CompareVersions(latestVer, current) > 0,
-            LatestVersion = latest
+            LatestVersion = targetVersion
         };
     }
 
@@ -196,10 +221,15 @@ public class UpdateService
     /// <summary>
     /// Adds a new version to the manifest.
     /// </summary>
-    public async Task<VersionInfo> AddVersionAsync(Stream fileStream, string version, string releaseNotes, string uploadedBy)
+    /// <param name="fileStream">The file stream</param>
+    /// <param name="version">Version string</param>
+    /// <param name="releaseNotes">Release notes</param>
+    /// <param name="uploadedBy">Who uploaded this version</param>
+    /// <param name="isTestVersion">Whether this is a test version</param>
+    public async Task<VersionInfo> AddVersionAsync(Stream fileStream, string version, string releaseNotes, string uploadedBy, bool isTestVersion = false)
     {
         // Validate version format and ensure it's higher than existing
-        if (!IsValidNewVersion(version))
+        if (!IsValidNewVersion(version, isTestVersion))
         {
             throw new InvalidOperationException($"Version {version} is not valid or not higher than existing versions");
         }
@@ -226,7 +256,8 @@ public class UpdateService
             FileSize = fileInfo.Length,
             UploadedAt = DateTime.UtcNow,
             ReleaseNotes = releaseNotes,
-            UploadedBy = uploadedBy
+            UploadedBy = uploadedBy,
+            IsTestVersion = isTestVersion
         };
 
         // Update manifest
@@ -234,12 +265,21 @@ public class UpdateService
         {
             var manifest = LoadManifest();
             manifest.Versions.Add(versionInfo);
-            manifest.LatestVersion = version;
+
+            if (isTestVersion)
+            {
+                manifest.LatestTestVersion = version;
+            }
+            else
+            {
+                manifest.LatestVersion = version;
+            }
+
             SaveManifest(manifest);
         }
 
-        _logger.LogInformation("Added version {Version} (size: {Size} bytes, hash: {Hash})",
-            version, fileInfo.Length, hash);
+        _logger.LogInformation("Added {Type} version {Version} (size: {Size} bytes, hash: {Hash})",
+            isTestVersion ? "test" : "production", version, fileInfo.Length, hash);
 
         return versionInfo;
     }
@@ -256,8 +296,15 @@ public class UpdateService
             if (versionInfo == null)
                 return false;
 
-            // Don't allow deleting the only version or the latest if there are others
-            if (manifest.Versions.Count == 1)
+            // Count versions of the same type
+            var sameTypeVersions = manifest.Versions.Where(v => v.IsTestVersion == versionInfo.IsTestVersion).ToList();
+
+            // Don't allow deleting the only version of a type (unless it's the only version overall)
+            if (sameTypeVersions.Count == 1 && manifest.Versions.Count > 1)
+            {
+                // Allow deletion - will just clear the latest for that type
+            }
+            else if (manifest.Versions.Count == 1)
             {
                 throw new InvalidOperationException("Cannot delete the only version");
             }
@@ -266,12 +313,27 @@ public class UpdateService
             manifest.Versions.Remove(versionInfo);
 
             // Update latest version if needed
-            if (manifest.LatestVersion == version)
+            if (versionInfo.IsTestVersion)
             {
-                var newLatest = manifest.Versions
-                    .OrderByDescending(v => ParseVersion(v.Version))
-                    .FirstOrDefault();
-                manifest.LatestVersion = newLatest?.Version ?? string.Empty;
+                if (manifest.LatestTestVersion == version)
+                {
+                    var newLatest = manifest.Versions
+                        .Where(v => v.IsTestVersion)
+                        .OrderByDescending(v => ParseVersion(v.Version))
+                        .FirstOrDefault();
+                    manifest.LatestTestVersion = newLatest?.Version ?? string.Empty;
+                }
+            }
+            else
+            {
+                if (manifest.LatestVersion == version)
+                {
+                    var newLatest = manifest.Versions
+                        .Where(v => !v.IsTestVersion)
+                        .OrderByDescending(v => ParseVersion(v.Version))
+                        .FirstOrDefault();
+                    manifest.LatestVersion = newLatest?.Version ?? string.Empty;
+                }
             }
 
             SaveManifest(manifest);
@@ -290,15 +352,18 @@ public class UpdateService
                 }
             }
 
-            _logger.LogInformation("Deleted version {Version}", version);
+            _logger.LogInformation("Deleted {Type} version {Version}",
+                versionInfo.IsTestVersion ? "test" : "production", version);
             return true;
         }
     }
 
     /// <summary>
-    /// Validates that a new version is higher than all existing versions.
+    /// Validates that a new version is higher than all existing versions of the same type.
     /// </summary>
-    public bool IsValidNewVersion(string newVersion)
+    /// <param name="newVersion">The new version string</param>
+    /// <param name="isTestVersion">Whether this is a test version</param>
+    public bool IsValidNewVersion(string newVersion, bool isTestVersion = false)
     {
         // Validate format: YYYY.MM.DD.BUILD
         var parts = newVersion.Split('.');
@@ -309,12 +374,16 @@ public class UpdateService
             return false;
 
         var manifest = LoadManifest();
-        if (manifest.Versions.Count == 0)
+
+        // Filter versions by type
+        var versionsOfSameType = manifest.Versions.Where(v => v.IsTestVersion == isTestVersion).ToList();
+
+        if (versionsOfSameType.Count == 0)
             return true;
 
         var newVer = ParseVersion(newVersion);
 
-        foreach (var existing in manifest.Versions)
+        foreach (var existing in versionsOfSameType)
         {
             var existingVer = ParseVersion(existing.Version);
             if (CompareVersions(newVer, existingVer) <= 0)

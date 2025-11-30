@@ -84,7 +84,8 @@ public class DatabaseController : ControllerBase
                 LastSeenAt = c.LastSeenAt,
                 TotalConnections = c.TotalConnections,
                 IsFlagged = c.IsFlagged,
-                IsBlocked = c.IsBlocked
+                IsBlocked = c.IsBlocked,
+                IsTestMode = c.IsTestMode
             }).ToList();
 
             return Ok(dtos);
@@ -130,6 +131,7 @@ public class DatabaseController : ControllerBase
                 TotalConnections = client.TotalConnections,
                 IsFlagged = client.IsFlagged,
                 IsBlocked = client.IsBlocked,
+                IsTestMode = client.IsTestMode,
                 Connections = client.Connections.Select(c => new ConnectionDto
                 {
                     Id = c.Id,
@@ -164,6 +166,7 @@ public class DatabaseController : ControllerBase
                 clientId,
                 request.IsFlagged,
                 request.IsBlocked,
+                request.IsTestMode,
                 request.Label);
 
             if (!result)
@@ -190,12 +193,48 @@ public class DatabaseController : ControllerBase
             if (!result)
                 return NotFound("Client not found");
 
+            _logger.LogInformation("Client {ClientId} deleted from database", clientId);
             return Ok();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting client {ClientId}", clientId);
             return StatusCode(500, "Failed to delete client");
+        }
+    }
+
+    /// <summary>
+    /// Deletes multiple clients from the database.
+    /// </summary>
+    [HttpPost("clients/bulk-delete")]
+    public async Task<ActionResult<BulkDeleteResult>> BulkDeleteClients([FromBody] BulkDeleteRequest request)
+    {
+        try
+        {
+            var deleted = 0;
+            var failed = new List<string>();
+
+            foreach (var clientId in request.ClientIds)
+            {
+                var result = await _repository.DeleteClientAsync(clientId);
+                if (result)
+                    deleted++;
+                else
+                    failed.Add(clientId);
+            }
+
+            _logger.LogInformation("Bulk delete completed: {Deleted} deleted, {Failed} failed", deleted, failed.Count);
+
+            return Ok(new BulkDeleteResult
+            {
+                DeletedCount = deleted,
+                FailedIds = failed
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during bulk delete");
+            return StatusCode(500, "Failed to delete clients");
         }
     }
 
@@ -334,6 +373,7 @@ public class ClientDto
     public int TotalConnections { get; set; }
     public bool IsFlagged { get; set; }
     public bool IsBlocked { get; set; }
+    public bool IsTestMode { get; set; }
 }
 
 public class ClientDetailDto : ClientDto
@@ -374,7 +414,19 @@ public class UpdateClientRequest
 {
     public bool? IsFlagged { get; set; }
     public bool? IsBlocked { get; set; }
+    public bool? IsTestMode { get; set; }
     public string? Label { get; set; }
+}
+
+public class BulkDeleteRequest
+{
+    public List<string> ClientIds { get; set; } = new();
+}
+
+public class BulkDeleteResult
+{
+    public int DeletedCount { get; set; }
+    public List<string> FailedIds { get; set; } = new();
 }
 
 public class DatabaseInfoDto

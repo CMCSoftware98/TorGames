@@ -217,6 +217,26 @@ async function toggleBlock(client: DatabaseClient) {
   }
 }
 
+async function toggleTestMode(client: DatabaseClient) {
+  try {
+    const token = authStore.sessionToken
+    if (!token) return
+
+    const result = await updateDatabaseClient(token, client.clientId, {
+      isTestMode: !client.isTestMode
+    })
+
+    if (result.success) {
+      client.isTestMode = !client.isTestMode
+      showSnackbar(client.isTestMode ? 'Test mode enabled' : 'Test mode disabled', 'success')
+    } else {
+      showSnackbar(result.error || 'Failed to update client', 'error')
+    }
+  } catch (e) {
+    showSnackbar('Failed to update client', 'error')
+  }
+}
+
 function openDeleteDialog(client: DatabaseClient) {
   clientToDelete.value = client
   deleteDialog.value = true
@@ -522,6 +542,14 @@ onMounted(async () => {
                 color="primary"
                 size="small"
               />
+              <v-icon
+                v-if="item.isTestMode"
+                icon="mdi-flask"
+                color="info"
+                size="small"
+              >
+                <v-tooltip activator="parent" location="top">Test Mode</v-tooltip>
+              </v-icon>
             </div>
           </template>
 
@@ -545,6 +573,16 @@ onMounted(async () => {
               >
                 <v-icon>{{ item.isFlagged ? 'mdi-flag-off' : 'mdi-flag' }}</v-icon>
                 <v-tooltip activator="parent" location="top">{{ item.isFlagged ? 'Unflag' : 'Flag' }}</v-tooltip>
+              </v-btn>
+              <v-btn
+                :icon="item.isTestMode ? 'mdi-flask-off' : 'mdi-flask'"
+                variant="text"
+                size="small"
+                :color="item.isTestMode ? 'info' : undefined"
+                @click="toggleTestMode(item)"
+              >
+                <v-icon>{{ item.isTestMode ? 'mdi-flask-off' : 'mdi-flask' }}</v-icon>
+                <v-tooltip activator="parent" location="top">{{ item.isTestMode ? 'Disable Test Mode' : 'Enable Test Mode' }}</v-tooltip>
               </v-btn>
               <v-btn
                 icon="mdi-delete"
@@ -692,7 +730,7 @@ onMounted(async () => {
             <!-- Flags -->
             <div class="mb-6">
               <div class="text-overline text-medium-emphasis mb-2">Flags</div>
-              <div class="d-flex ga-2">
+              <div class="d-flex ga-2 flex-wrap">
                 <v-chip
                   :color="selectedClient.isFlagged ? 'warning' : 'default'"
                   variant="tonal"
@@ -708,6 +746,14 @@ onMounted(async () => {
                 >
                   <v-icon start size="small">{{ selectedClient.isBlocked ? 'mdi-block-helper' : 'mdi-check-circle-outline' }}</v-icon>
                   {{ selectedClient.isBlocked ? 'Blocked' : 'Not Blocked' }}
+                </v-chip>
+                <v-chip
+                  :color="selectedClient.isTestMode ? 'info' : 'default'"
+                  variant="tonal"
+                  @click="toggleTestMode(selectedClient); selectedClient.isTestMode = !selectedClient.isTestMode"
+                >
+                  <v-icon start size="small">{{ selectedClient.isTestMode ? 'mdi-flask' : 'mdi-flask-outline' }}</v-icon>
+                  {{ selectedClient.isTestMode ? 'Test Mode' : 'Production' }}
                 </v-chip>
                 <v-chip v-if="selectedClient.isAdmin" color="primary" variant="tonal">
                   <v-icon start size="small">mdi-shield-check</v-icon>

@@ -19,6 +19,7 @@ const uploadDialog = ref(false)
 const uploadLoading = ref(false)
 const selectedFile = ref<File | null>(null)
 const releaseNotes = ref('')
+const isTestVersion = ref(false)
 const uploadError = ref<string | null>(null)
 
 // Delete dialog
@@ -35,6 +36,7 @@ const snackbar = ref({
 
 const headers = [
   { title: 'Version', key: 'version', sortable: true },
+  { title: 'Type', key: 'isTestVersion', sortable: true, width: '100px' },
   { title: 'Size', key: 'fileSize', sortable: true },
   { title: 'Uploaded', key: 'uploadedAt', sortable: true },
   { title: 'Release Notes', key: 'releaseNotes', sortable: false },
@@ -73,9 +75,10 @@ async function loadVersions() {
   }
 }
 
-function openUploadDialog() {
+function openUploadDialog(testMode: boolean = false) {
   selectedFile.value = null
   releaseNotes.value = ''
+  isTestVersion.value = testMode
   uploadError.value = null
   uploadDialog.value = true
 }
@@ -104,13 +107,13 @@ async function handleUpload() {
       return
     }
 
-    const result = await uploadVersion(token, selectedFile.value, releaseNotes.value)
+    const result = await uploadVersion(token, selectedFile.value, releaseNotes.value, isTestVersion.value)
 
     if (result.success) {
       uploadDialog.value = false
       snackbar.value = {
         show: true,
-        message: `Version ${result.version?.version} uploaded successfully`,
+        message: `${isTestVersion.value ? 'Test version' : 'Version'} ${result.version?.version} uploaded successfully`,
         color: 'success'
       }
       await loadVersions()
@@ -206,12 +209,22 @@ onMounted(() => {
       </v-btn>
       <v-btn
         v-if="activeTab === 'versions'"
+        prepend-icon="mdi-flask"
+        color="info"
+        variant="tonal"
+        @click="openUploadDialog(true)"
+        class="font-weight-bold mr-2"
+      >
+        Upload Test
+      </v-btn>
+      <v-btn
+        v-if="activeTab === 'versions'"
         prepend-icon="mdi-upload"
         color="primary"
-        @click="openUploadDialog"
+        @click="openUploadDialog(false)"
         class="font-weight-bold"
       >
-        Upload Version
+        Upload Production
       </v-btn>
     </div>
 
@@ -281,6 +294,17 @@ onMounted(() => {
           </v-chip>
         </template>
 
+        <template #item.isTestVersion="{ item }">
+          <v-chip
+            :color="item.isTestVersion ? 'info' : 'success'"
+            variant="tonal"
+            size="small"
+          >
+            <v-icon start size="small">{{ item.isTestVersion ? 'mdi-flask' : 'mdi-rocket-launch' }}</v-icon>
+            {{ item.isTestVersion ? 'Test' : 'Prod' }}
+          </v-chip>
+        </template>
+
         <template #item.fileSize="{ item }">
           <span class="font-mono text-caption">{{ formatBytesShort(item.fileSize) }}</span>
         </template>
@@ -328,8 +352,8 @@ onMounted(() => {
     <v-dialog v-model="uploadDialog" max-width="500" persistent>
       <v-card class="glass-panel rounded-xl border-none">
         <v-card-title class="d-flex align-center px-6 py-4 border-b border-opacity-10">
-          <v-icon class="mr-2" color="primary">mdi-upload</v-icon>
-          Upload New Version
+          <v-icon class="mr-2" :color="isTestVersion ? 'info' : 'primary'">{{ isTestVersion ? 'mdi-flask' : 'mdi-upload' }}</v-icon>
+          Upload {{ isTestVersion ? 'Test' : 'Production' }} Version
         </v-card-title>
 
         <v-card-text class="pa-6">
@@ -378,6 +402,16 @@ onMounted(() => {
             <div class="text-caption">
               Version is automatically extracted from the executable's assembly metadata.
               Build the client with "dotnet publish" to embed the version.
+            </div>
+          </v-alert>
+
+          <v-alert v-if="isTestVersion" type="warning" density="compact" variant="tonal" class="mt-4 rounded-lg border-none bg-opacity-10">
+            <template #prepend>
+              <v-icon color="warning" size="small">mdi-flask</v-icon>
+            </template>
+            <div class="text-caption">
+              <strong>Test Version:</strong> This version will only be deployed to clients marked as "Test Mode"
+              in the Saved Data panel. Other clients will continue using the production version.
             </div>
           </v-alert>
         </v-card-text>

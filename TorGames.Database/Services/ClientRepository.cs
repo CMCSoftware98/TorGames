@@ -235,7 +235,12 @@ public class ClientRepository
     /// <summary>
     /// Updates client flags.
     /// </summary>
-    public async Task<bool> UpdateClientFlagsAsync(string clientId, bool? isFlagged = null, bool? isBlocked = null, string? label = null)
+    public async Task<bool> UpdateClientFlagsAsync(
+        string clientId,
+        bool? isFlagged = null,
+        bool? isBlocked = null,
+        bool? isTestMode = null,
+        string? label = null)
     {
         var client = await _context.Clients.FindAsync(clientId);
         if (client == null) return false;
@@ -246,11 +251,23 @@ public class ClientRepository
         if (isBlocked.HasValue)
             client.IsBlocked = isBlocked.Value;
 
+        if (isTestMode.HasValue)
+            client.IsTestMode = isTestMode.Value;
+
         if (label != null)
             client.Label = label;
 
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    /// <summary>
+    /// Checks if a client is in test mode.
+    /// </summary>
+    public async Task<bool> IsClientInTestModeAsync(string clientId)
+    {
+        var client = await _context.Clients.FindAsync(clientId);
+        return client?.IsTestMode ?? false;
     }
 
     /// <summary>

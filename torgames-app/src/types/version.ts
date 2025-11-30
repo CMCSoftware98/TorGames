@@ -6,6 +6,7 @@ export interface VersionInfo {
   uploadedAt: string
   releaseNotes: string
   uploadedBy: string
+  isTestVersion: boolean
 }
 
 // Response from update check endpoint

@@ -89,12 +89,14 @@ export async function getVersions(token: string): Promise<VersionInfo[]> {
 export async function uploadVersion(
   token: string,
   file: File,
-  releaseNotes: string
+  releaseNotes: string,
+  isTestVersion: boolean = false
 ): Promise<{ success: boolean; version?: VersionInfo; error?: string }> {
   try {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('releaseNotes', releaseNotes)
+    formData.append('isTestVersion', isTestVersion.toString())
 
     const response = await fetch(`${API_BASE_URL}/update/upload`, {
       method: 'POST',
@@ -256,6 +258,7 @@ export interface DatabaseClient {
   totalConnections: number
   isFlagged: boolean
   isBlocked: boolean
+  isTestMode: boolean
 }
 
 export interface ClientConnection {
@@ -369,7 +372,7 @@ export async function getDatabaseClient(token: string, clientId: string): Promis
 export async function updateDatabaseClient(
   token: string,
   clientId: string,
-  updates: { isFlagged?: boolean; isBlocked?: boolean; label?: string }
+  updates: { isFlagged?: boolean; isBlocked?: boolean; isTestMode?: boolean; label?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(`${API_BASE_URL}/database/clients/${encodeURIComponent(clientId)}`, {
@@ -417,6 +420,40 @@ export async function deleteDatabaseClient(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to delete client',
+    }
+  }
+}
+
+export interface BulkDeleteResult {
+  deletedCount: number
+  failedIds: string[]
+}
+
+export async function bulkDeleteDatabaseClients(
+  token: string,
+  clientIds: string[]
+): Promise<{ success: boolean; result?: BulkDeleteResult; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/database/clients/bulk-delete`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ clientIds }),
+    })
+
+    if (!response.ok) {
+      return { success: false, error: `Server error: ${response.status}` }
+    }
+
+    const result = await response.json()
+    return { success: true, result }
+  } catch (error) {
+    console.error('Bulk delete database clients failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete clients',
     }
   }
 }

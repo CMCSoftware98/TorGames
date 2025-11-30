@@ -154,6 +154,16 @@ export const useClientsStore = defineStore('clients', () => {
     commandResults.value = []
   }
 
+  function removeClient(clientId: string) {
+    // Find and remove client by clientId (not connectionKey)
+    for (const [key, client] of clients.value.entries()) {
+      if (client.clientId === clientId) {
+        clients.value.delete(key)
+        break
+      }
+    }
+  }
+
   return {
     // State
     clients,
@@ -172,6 +182,7 @@ export const useClientsStore = defineStore('clients', () => {
     disconnect,
     executeCommand,
     getClient,
-    clearCommandResults
+    clearCommandResults,
+    removeClient
   }
 })
