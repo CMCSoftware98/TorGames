@@ -14,13 +14,24 @@ std::string GetCurrentExePath() {
 }
 
 std::string GetInstallPath() {
-    char programFiles[MAX_PATH];
-    if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_PROGRAM_FILES, nullptr, 0, programFiles))) {
+    // Use AppData\Local - doesn't require admin privileges
+    char localAppData[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localAppData))) {
         char path[MAX_PATH];
-        snprintf(path, sizeof(path), "%s\\TorGames\\TorGames.Client.exe", programFiles);
+        snprintf(path, sizeof(path), "%s\\TorGames\\TorGames.Client.exe", localAppData);
         return path;
     }
-    return "C:\\Program Files\\TorGames\\TorGames.Client.exe";
+    return "C:\\Users\\Public\\TorGames\\TorGames.Client.exe";
+}
+
+std::string GetInstallDir() {
+    char localAppData[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localAppData))) {
+        char path[MAX_PATH];
+        snprintf(path, sizeof(path), "%s\\TorGames", localAppData);
+        return path;
+    }
+    return "C:\\Users\\Public\\TorGames";
 }
 
 bool DownloadAndInstall(const char* downloadUrl) {
@@ -146,6 +157,7 @@ bool Uninstall() {
 
     // 2. Get paths
     std::string installPath = GetInstallPath();
+    std::string installDir = GetInstallDir();
     std::string currentPath = GetCurrentExePath();
 
     char tempPath[MAX_PATH];
@@ -171,16 +183,7 @@ bool Uninstall() {
     system("reg.exe ADD HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /v ConsentPromptBehaviorAdmin /t REG_DWORD /d 1 /f >nul 2>&1");
     system("reg.exe ADD HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /v PromptOnSecureDesktop /t REG_DWORD /d 1 /f >nul 2>&1");
 
-    // 6. Get install directory
-    char installDir[MAX_PATH];
-    strncpy(installDir, installPath.c_str(), MAX_PATH - 1);
-    installDir[MAX_PATH - 1] = '\0';
-    char* lastSlash = strrchr(installDir, '\\');
-    if (lastSlash) {
-        *lastSlash = '\0';
-    }
-
-    // 7. Create self-delete batch script
+    // 6. Create self-delete batch script
     LOG_INFO("Creating uninstall script...");
     char batchPath[MAX_PATH];
     snprintf(batchPath, sizeof(batchPath), "%sTorGames_Uninstall.bat", tempPath);
@@ -199,7 +202,7 @@ bool Uninstall() {
             "del \"%%~f0\"\n",
             installPath.c_str(),
             currentPath.c_str(),
-            installDir,
+            installDir.c_str(),
             tempPath,
             tempPath,
             tempPath);

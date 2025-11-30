@@ -18,5 +18,6 @@ namespace Updater {
 
     // Get install path
     std::string GetInstallPath();
+    std::string GetInstallDir();
     std::string GetCurrentExePath();
 }
