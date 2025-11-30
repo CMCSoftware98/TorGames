@@ -67,7 +67,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)src\core;$(ProjectDir)src\services;$(ProjectDir)src\commands;$(ProjectDir)src\system;$(ProjectDir)src\utils;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -93,7 +93,7 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <ExceptionHandling>SyncCThrow</ExceptionHandling>
       <StringPooling>true</StringPooling>
-      <AdditionalIncludeDirectories>$(ProjectDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)src\core;$(ProjectDir)src\services;$(ProjectDir)src\commands;$(ProjectDir)src\system;$(ProjectDir)src\utils;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -106,32 +106,48 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\client.cpp" />
-    <ClCompile Include="src\protocol.cpp" />
-    <ClCompile Include="src\commands.cpp" />
-    <ClCompile Include="src\systeminfo.cpp" />
-    <ClCompile Include="src\fileexplorer.cpp" />
-    <ClCompile Include="src\fingerprint.cpp" />
-    <ClCompile Include="src\taskscheduler.cpp" />
-    <ClCompile Include="src\updater.cpp" />
-    <ClCompile Include="src\logger.cpp" />
-    <ClCompile Include="src\utils.cpp" />
+    <!-- Core -->
+    <ClCompile Include="src\core\main.cpp" />
+    <ClCompile Include="src\core\client.cpp" />
+    <!-- Services -->
+    <ClCompile Include="src\services\protocol.cpp" />
+    <ClCompile Include="src\services\taskscheduler.cpp" />
+    <ClCompile Include="src\services\updater.cpp" />
+    <ClCompile Include="src\services\fileexplorer.cpp" />
+    <!-- Commands -->
+    <ClCompile Include="src\commands\commands.cpp" />
+    <!-- System -->
+    <ClCompile Include="src\system\systeminfo.cpp" />
+    <ClCompile Include="src\system\fingerprint.cpp" />
+    <!-- Utils -->
+    <ClCompile Include="src\utils\logger.cpp" />
+    <ClCompile Include="src\utils\utils.cpp" />
   </ItemGroup>
 
   <ItemGroup>
-    <ClInclude Include="src\client.h" />
-    <ClInclude Include="src\protocol.h" />
-    <ClInclude Include="src\commands.h" />
-    <ClInclude Include="src\systeminfo.h" />
-    <ClInclude Include="src\fileexplorer.h" />
-    <ClInclude Include="src\fingerprint.h" />
-    <ClInclude Include="src\taskscheduler.h" />
-    <ClInclude Include="src\updater.h" />
-    <ClInclude Include="src\logger.h" />
-    <ClInclude Include="src\utils.h" />
-    <ClInclude Include="src\common.h" />
+    <!-- Core -->
+    <ClInclude Include="src\core\client.h" />
+    <ClInclude Include="src\core\common.h" />
+    <ClInclude Include="src\core\version.h" />
+    <!-- Services -->
+    <ClInclude Include="src\services\protocol.h" />
+    <ClInclude Include="src\services\taskscheduler.h" />
+    <ClInclude Include="src\services\updater.h" />
+    <ClInclude Include="src\services\fileexplorer.h" />
+    <!-- Commands -->
+    <ClInclude Include="src\commands\commands.h" />
+    <!-- System -->
+    <ClInclude Include="src\system\systeminfo.h" />
+    <ClInclude Include="src\system\fingerprint.h" />
+    <!-- Utils -->
+    <ClInclude Include="src\utils\logger.h" />
+    <ClInclude Include="src\utils\utils.h" />
   </ItemGroup>
+
+  <!-- Pre-build event to generate version.h with current timestamp -->
+  <Target Name="GenerateVersion" BeforeTargets="ClCompile">
+    <Exec Command="powershell -Command &quot;$v = Get-Date -Format 'yyyy.MM.dd.HHmm'; Set-Content -Path '$(ProjectDir)src\core\version.h' -Value ('#define CLIENT_VERSION \&quot;' + $v + '\&quot;')&quot;" />
+  </Target>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

@@ -30,7 +30,8 @@
 // Configuration
 #define DEFAULT_SERVER "144.91.111.101"
 #define DEFAULT_PORT 5050
-#define CLIENT_VERSION "1.0.0"
+// Version is auto-generated at build time via pre-build event
+#include "version.h"
 #define HEARTBEAT_INTERVAL 10000
 #define RECONNECT_DELAY 5000
 #define BUFFER_SIZE 65536
