@@ -47,7 +47,15 @@ builder.Services.AddSingleton<JwtService>();
 builder.Services.AddSingleton<UpdateService>();
 
 // Add Database
-var dataFolder = Path.Combine(AppContext.BaseDirectory, "Data");
+string dataFolder;
+if (OperatingSystem.IsLinux())
+{
+    dataFolder = "/root/database";
+}
+else
+{
+    dataFolder = Path.Combine(AppContext.BaseDirectory, "Data");
+}
 Directory.CreateDirectory(dataFolder);
 var databasePath = Path.Combine(dataFolder, "torgames.db");
 builder.Services.AddTorGamesDatabase($"Data Source={databasePath}");
