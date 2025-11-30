@@ -135,11 +135,106 @@ builder.Logging.AddConsole();
 
 var app = builder.Build();
 
-// Ensure database is created and migrated
+// Apply pending database migrations on startup
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<TorGamesDbContext>();
-    dbContext.Database.EnsureCreated();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        // Check if database file exists
+        var dbExists = File.Exists(databasePath);
+
+        if (!dbExists)
+        {
+            // New database - create with migrations
+            logger.LogInformation("Creating new database with migrations...");
+            dbContext.Database.Migrate();
+            logger.LogInformation("Database created successfully");
+        }
+        else
+        {
+            // Check if migrations table exists (database may have been created with EnsureCreated)
+            var connection = dbContext.Database.GetDbConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory'";
+            var migrationsTableExists = await command.ExecuteScalarAsync() != null;
+
+            if (!migrationsTableExists)
+            {
+                // Database exists but was created without migrations
+                // Create migrations table and mark existing schema as applied
+                logger.LogInformation("Initializing migrations for existing database...");
+
+                // Create the migrations history table
+                using var createTableCmd = connection.CreateCommand();
+                createTableCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
+                        ""MigrationId"" TEXT NOT NULL CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY,
+                        ""ProductVersion"" TEXT NOT NULL
+                    )";
+                await createTableCmd.ExecuteNonQueryAsync();
+
+                // Check if IsTestMode column already exists
+                using var checkColumnCmd = connection.CreateCommand();
+                checkColumnCmd.CommandText = "PRAGMA table_info(Clients)";
+                var hasIsTestMode = false;
+                using (var reader = await checkColumnCmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        if (reader.GetString(1) == "IsTestMode")
+                        {
+                            hasIsTestMode = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasIsTestMode)
+                {
+                    // Add the IsTestMode column
+                    logger.LogInformation("Adding IsTestMode column to Clients table...");
+                    using var addColumnCmd = connection.CreateCommand();
+                    addColumnCmd.CommandText = "ALTER TABLE Clients ADD COLUMN IsTestMode INTEGER NOT NULL DEFAULT 0";
+                    await addColumnCmd.ExecuteNonQueryAsync();
+                }
+
+                // Mark the migration as applied
+                using var insertCmd = connection.CreateCommand();
+                insertCmd.CommandText = @"
+                    INSERT OR IGNORE INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+                    VALUES ('20251130225506_AddIsTestModeToClient', '10.0.0')";
+                await insertCmd.ExecuteNonQueryAsync();
+
+                logger.LogInformation("Database migrations initialized");
+            }
+            else
+            {
+                // Normal migration path
+                var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
+                if (pendingMigrations.Count > 0)
+                {
+                    logger.LogInformation("Applying {Count} pending database migration(s): {Migrations}",
+                        pendingMigrations.Count, string.Join(", ", pendingMigrations));
+                    dbContext.Database.Migrate();
+                    logger.LogInformation("Database migrations applied successfully");
+                }
+                else
+                {
+                    logger.LogInformation("Database is up to date");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error applying database migrations");
+        throw;
+    }
 }
 
 // Use CORS
