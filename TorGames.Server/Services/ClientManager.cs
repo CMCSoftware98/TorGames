@@ -296,25 +296,19 @@ public class ClientManager
         _logger.LogInformation("Gracefully disconnecting {Count} clients...", clients.Count);
 
         // Send shutdown notification to all clients in parallel
+        var shutdownCommand = new Command
+        {
+            CommandId = Guid.NewGuid().ToString(),
+            CommandType = "server_shutdown",
+            CommandText = "Server is shutting down. Please reconnect later.",
+            TimeoutSeconds = 0
+        };
+
         var tasks = clients.Select(async client =>
         {
             try
             {
-                // Send a shutdown command to notify the client
-                var shutdownMessage = new ServerMessage
-                {
-                    MessageId = Guid.NewGuid().ToString(),
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    Command = new Command
-                    {
-                        CommandId = Guid.NewGuid().ToString(),
-                        CommandType = "server_shutdown",
-                        CommandText = "Server is shutting down. Please reconnect later.",
-                        TimeoutSeconds = 0
-                    }
-                };
-
-                await client.SendMessageAsync(shutdownMessage);
+                await client.SendCommandAsync(shutdownCommand);
                 _logger.LogDebug("Sent shutdown notification to {ConnectionKey}", client.ConnectionKey);
             }
             catch (Exception ex)

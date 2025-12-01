@@ -195,67 +195,49 @@ public class UpdateController : ControllerBase
             // Build the update command - use "update" type with URL for backwards compatibility
             var downloadUrl = $"https://{Request.Host.Host}:{Request.Host.Port ?? 5001}/api/update/download/{extractedVersion}";
 
-            // Only notify clients for production versions (test versions are targeted)
-            if (!isTestVersion)
+            // Notify clients about the new version
+            _ = Task.Run(async () =>
             {
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
-                    {
-                        _logger.LogInformation(
-                            "Broadcasting update to {TotalClients} connected clients (Online: {OnlineClients})",
-                            _clientManager.ConnectedCount,
-                            _clientManager.OnlineCount);
+                    _logger.LogInformation(
+                        "Broadcasting update to {TotalClients} connected clients (Online: {OnlineClients})",
+                        _clientManager.ConnectedCount,
+                        _clientManager.OnlineCount);
 
-                        // Use "update" command type with URL for backwards compatibility with older clients
-                        var updateCommand = new Command
-                        {
-                            CommandId = Guid.NewGuid().ToString(),
-                            CommandType = "update",
-                            CommandText = $"{{\"url\":\"{downloadUrl}\"}}",
-                            TimeoutSeconds = 300
-                        };
-
-                        var clientCount = await _clientManager.BroadcastCommandToAllAsync(updateCommand);
-                        _logger.LogInformation(
-                            "Notified {ClientCount} clients about new version {Version}",
-                            clientCount,
-                            extractedVersion);
-                    }
-                    catch (Exception ex)
+                    var updateCommand = new Command
                     {
-                        _logger.LogWarning(ex, "Failed to notify clients about new update");
-                    }
-                });
-            }
-            else
-            {
-                // For test versions, notify only test clients
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        // Use "update" command type with URL for backwards compatibility with older clients
-                        var updateCommand = new Command
-                        {
-                            CommandId = Guid.NewGuid().ToString(),
-                            CommandType = "update",
-                            CommandText = $"{{\"url\":\"{downloadUrl}\"}}",
-                            TimeoutSeconds = 300
-                        };
+                        CommandId = Guid.NewGuid().ToString(),
+                        CommandType = "update",
+                        CommandText = $"{{\"url\":\"{downloadUrl}\"}}",
+                        TimeoutSeconds = 300
+                    };
 
-                        var clientCount = await _clientManager.BroadcastCommandToTestClientsAsync(updateCommand);
+                    int clientCount;
+                    if (isTestVersion)
+                    {
+                        // For test versions, notify only test clients
+                        clientCount = await _clientManager.BroadcastCommandToTestClientsAsync(updateCommand);
                         _logger.LogInformation(
                             "Notified {ClientCount} test clients about new test version {Version}",
                             clientCount,
                             extractedVersion);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        _logger.LogWarning(ex, "Failed to notify test clients about new update");
+                        // For production versions, notify all clients
+                        clientCount = await _clientManager.BroadcastCommandToAllAsync(updateCommand);
+                        _logger.LogInformation(
+                            "Notified {ClientCount} clients about new version {Version}",
+                            clientCount,
+                            extractedVersion);
                     }
-                });
-            }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to notify clients about new update");
+                }
+            });
 
             return Ok(versionInfo);
         }

@@ -1,10 +1,9 @@
-using Grpc.Core;
 using TorGames.Common.Protos;
 
 namespace TorGames.Server.Models;
 
 /// <summary>
-/// Represents a connected client with its state and communication stream.
+/// Represents a connected client with its state.
 /// </summary>
 public class ConnectedClient
 {
@@ -57,9 +56,8 @@ public class ConnectedClient
     private readonly Dictionary<string, TaskCompletionSource<DetailedSystemInfo>> _pendingSystemInfoRequests = new();
     private readonly object _requestLock = new();
 
-    // Communication stream
-    public IServerStreamWriter<ServerMessage>? ResponseStream { get; set; }
-    public CancellationToken CancellationToken { get; set; }
+    // Command sender delegate - set by TcpInstallerService
+    public Func<Command, Task<bool>>? CommandSender { get; set; }
 
     /// <summary>
     /// Updates client info from registration message.
@@ -93,17 +91,16 @@ public class ConnectedClient
     }
 
     /// <summary>
-    /// Sends a message to this client.
+    /// Sends a command to this client via TCP.
     /// </summary>
-    public async Task<bool> SendMessageAsync(ServerMessage message)
+    public async Task<bool> SendCommandAsync(Command command)
     {
-        if (ResponseStream == null || CancellationToken.IsCancellationRequested)
+        if (CommandSender == null)
             return false;
 
         try
         {
-            await ResponseStream.WriteAsync(message, CancellationToken);
-            return true;
+            return await CommandSender(command);
         }
         catch
         {
@@ -112,25 +109,11 @@ public class ConnectedClient
     }
 
     /// <summary>
-    /// Sends a command to this client.
-    /// </summary>
-    public Task<bool> SendCommandAsync(Command command)
-    {
-        var message = new ServerMessage
-        {
-            MessageId = Guid.NewGuid().ToString(),
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Command = command
-        };
-        return SendMessageAsync(message);
-    }
-
-    /// <summary>
     /// Requests detailed system information from the client.
     /// </summary>
     public async Task<DetailedSystemInfo?> RequestDetailedSystemInfoAsync(TimeSpan timeout)
     {
-        if (ResponseStream == null || CancellationToken.IsCancellationRequested || !IsOnline)
+        if (CommandSender == null || !IsOnline)
             return LastDetailedSystemInfo;
 
         var requestId = Guid.NewGuid().ToString();

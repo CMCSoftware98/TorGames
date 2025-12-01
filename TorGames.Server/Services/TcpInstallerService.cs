@@ -164,6 +164,9 @@ public class TcpInstallerService : BackgroundService
             var connectedClient = CreateConnectedClient(registration, remoteEndpoint);
             var tcpConnection = new TcpClientConnection(tcpClient, stream, connectedClient, cts);
 
+            // Set the command sender delegate so commands can be sent via TCP
+            connectedClient.CommandSender = async (command) => await SendCommandToConnectionAsync(tcpConnection, command);
+
             var (success, rejectionReason) = _clientManager.TryRegisterClient(connectedClient);
             if (!success)
             {
@@ -347,6 +350,14 @@ public class TcpInstallerService : BackgroundService
         if (!_tcpClients.TryGetValue(connectionKey, out var connection))
             return false;
 
+        return await SendCommandToConnectionAsync(connection, command);
+    }
+
+    /// <summary>
+    /// Sends a command to a specific TCP connection.
+    /// </summary>
+    private async Task<bool> SendCommandToConnectionAsync(TcpClientConnection connection, Command command)
+    {
         try
         {
             var message = new TcpMessage
@@ -363,7 +374,7 @@ public class TcpInstallerService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to send command to {Key}", connectionKey);
+            _logger.LogDebug(ex, "Failed to send command to {Key}", connection.Client.ConnectionKey);
             return false;
         }
     }

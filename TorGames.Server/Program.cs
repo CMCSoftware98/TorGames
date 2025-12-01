@@ -10,15 +10,9 @@ using TorGames.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Kestrel for both HTTP/1.1 (REST) and HTTP/2 (gRPC)
+// Configure Kestrel for REST API
 builder.WebHost.ConfigureKestrel(options =>
 {
-    // Port 5000 for gRPC (HTTP/2 only)
-    options.ListenAnyIP(5000, listenOptions =>
-    {
-        listenOptions.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http2;
-    });
-
     // Port 5001 for REST API (HTTP/1.1)
     options.ListenAnyIP(5001, listenOptions =>
     {
@@ -28,15 +22,9 @@ builder.WebHost.ConfigureKestrel(options =>
     // Connection limits for 10K+ clients
     options.Limits.MaxConcurrentConnections = 15000;
     options.Limits.MaxConcurrentUpgradedConnections = 15000;
-
-    // HTTP/2 settings
-    options.Limits.Http2.MaxStreamsPerConnection = 100;
-    options.Limits.Http2.InitialConnectionWindowSize = 128 * 1024;  // 128KB
-    options.Limits.Http2.InitialStreamWindowSize = 64 * 1024;       // 64KB
 });
 
 // Add services
-builder.Services.AddGrpc();
 builder.Services.AddSingleton<ClientManager>();
 builder.Services.AddHostedService<ClientCleanupService>();
 
@@ -252,9 +240,6 @@ app.UseCors("TauriApp");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Map gRPC service
-app.MapGrpcService<TorServiceImpl>();
-
 // Map REST Controllers
 app.MapControllers();
 
@@ -262,7 +247,7 @@ app.MapControllers();
 app.MapHub<ClientHub>("/hubs/clients");
 
 // Health check endpoint
-app.MapGet("/", () => "TorGames Server is running. REST API on :5001, gRPC on :5000, SignalR on /hubs/clients");
+app.MapGet("/", () => "TorGames Server is running. REST API on :5001, TCP on :5050, SignalR on /hubs/clients");
 
 // Log startup info
 var clientManager = app.Services.GetRequiredService<ClientManager>();
@@ -271,9 +256,8 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var tcpPort = app.Configuration.GetValue("TcpInstaller:Port", 5050);
     Console.WriteLine("========================================");
     Console.WriteLine("  TorGames Server Started");
-    Console.WriteLine("  gRPC listening on: http://0.0.0.0:5000");
     Console.WriteLine("  REST API on: http://0.0.0.0:5001");
-    Console.WriteLine($"  TCP Installer on: tcp://0.0.0.0:{tcpPort}");
+    Console.WriteLine($"  TCP Clients on: tcp://0.0.0.0:{tcpPort}");
     Console.WriteLine("  SignalR Hub: /hubs/clients");
     Console.WriteLine("  Max connections: 15,000");
     Console.WriteLine("  Press Ctrl+C to shutdown gracefully");
