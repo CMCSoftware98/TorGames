@@ -86,7 +86,7 @@ public class ClientManager
 
             // Remove the old client first
             _clients.TryRemove(client.ConnectionKey, out _);
-            ClientDisconnected?.Invoke(this, new ClientEventArgs { Client = existingClient });
+            SafeInvokeEvent(ClientDisconnected, existingClient, "ClientDisconnected");
         }
 
         if (_clients.TryAdd(client.ConnectionKey, client))
@@ -97,7 +97,7 @@ public class ClientManager
                 client.MachineName);
 
             // Raise event for SignalR hub
-            ClientConnected?.Invoke(this, new ClientEventArgs { Client = client });
+            SafeInvokeEvent(ClientConnected, client, "ClientConnected");
 
             return (true, null);
         }
@@ -107,6 +107,24 @@ public class ClientManager
             "Client registration failed unexpectedly: {ConnectionKey}",
             client.ConnectionKey);
         return (false, "Failed to register client");
+    }
+
+    /// <summary>
+    /// Safely invokes an event, catching any exceptions from handlers.
+    /// </summary>
+    private void SafeInvokeEvent(EventHandler<ClientEventArgs>? handler, ConnectedClient client, string eventName)
+    {
+        if (handler == null) return;
+
+        try
+        {
+            handler.Invoke(this, new ClientEventArgs { Client = client });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error invoking {EventName} event for {ConnectionKey}",
+                eventName, client.ConnectionKey);
+        }
     }
 
     /// <summary>
@@ -122,7 +140,7 @@ public class ClientManager
                 client.MachineName);
 
             // Raise event for SignalR hub
-            ClientDisconnected?.Invoke(this, new ClientEventArgs { Client = client });
+            SafeInvokeEvent(ClientDisconnected, client, "ClientDisconnected");
 
             return true;
         }
@@ -186,7 +204,7 @@ public class ClientManager
             client.UpdateFromHeartbeat(heartbeat);
 
             // Raise event for SignalR hub
-            ClientHeartbeatReceived?.Invoke(this, new ClientEventArgs { Client = client });
+            SafeInvokeEvent(ClientHeartbeatReceived, client, "ClientHeartbeatReceived");
         }
     }
 
