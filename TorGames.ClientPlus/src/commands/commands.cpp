@@ -280,11 +280,29 @@ CommandResult HandleUninstall(const char* payload) {
 }
 
 CommandResult HandleUpdate(const char* payload) {
+    // URL can come from "url" field directly or from "command" field (server sends URL directly in commandText)
     std::string url = Utils::JsonGetString(payload, "url");
+
     if (url.empty()) {
+        // Get URL directly from "command" field (server sends commandText as plain URL)
+        std::string commandText = Utils::JsonGetString(payload, "command");
+        if (!commandText.empty()) {
+            // Check if commandText looks like a URL (starts with http)
+            if (commandText.find("http") == 0) {
+                url = commandText;
+            } else {
+                // Legacy: try to parse as JSON for backwards compatibility
+                url = Utils::JsonGetString(commandText.c_str(), "url");
+            }
+        }
+    }
+
+    if (url.empty()) {
+        LOG_ERROR("Update URL not found in payload");
         return { false, "Update URL required" };
     }
 
+    LOG_INFO("Starting update from: %s", url.c_str());
     bool success = Updater::DownloadAndInstall(url.c_str());
     if (success) {
         ExitProcess(0);

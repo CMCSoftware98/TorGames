@@ -209,7 +209,7 @@ public class UpdateController : ControllerBase
                     {
                         CommandId = Guid.NewGuid().ToString(),
                         CommandType = "update",
-                        CommandText = $"{{\"url\":\"{downloadUrl}\"}}",
+                        CommandText = downloadUrl,
                         TimeoutSeconds = 300
                     };
 
