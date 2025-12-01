@@ -530,9 +530,9 @@ public class TcpInstallerService : BackgroundService
             ClientVersion = reg.ClientVersion ?? "1.0.0",
             IpAddress = string.IsNullOrEmpty(reg.IpAddress) ? clientIp : reg.IpAddress,
             MacAddress = reg.MacAddress ?? "",
-            IsAdmin = false,
+            IsAdmin = reg.IsAdmin ?? false,
             CountryCode = "",
-            IsUacEnabled = true
+            IsUacEnabled = reg.IsUacEnabled ?? true
         };
     }
 
@@ -642,6 +642,8 @@ public class TcpMessage
     public string? ClientVersion { get; set; }
     public string? IpAddress { get; set; }
     public string? MacAddress { get; set; }
+    public bool? IsAdmin { get; set; }
+    public bool? IsUacEnabled { get; set; }
 
     // Heartbeat fields
     public long? Uptime { get; set; }
