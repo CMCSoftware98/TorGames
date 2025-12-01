@@ -272,6 +272,23 @@ public class TcpInstallerService : BackgroundService
         switch (message.Type?.ToLowerInvariant())
         {
             case "heartbeat":
+                // Check if client was removed from ClientManager (e.g., by cleanup service)
+                // If so, re-register it since the TCP connection is still active
+                if (_clientManager.GetClient(connection.Client.ConnectionKey) == null)
+                {
+                    _logger.LogInformation(
+                        "Re-registering client {ConnectionKey} after cleanup",
+                        connection.Client.ConnectionKey);
+
+                    var (success, _) = _clientManager.TryRegisterClient(connection.Client);
+                    if (!success)
+                    {
+                        _logger.LogWarning(
+                            "Failed to re-register client {ConnectionKey}",
+                            connection.Client.ConnectionKey);
+                    }
+                }
+
                 var heartbeat = new Heartbeat
                 {
                     UptimeSeconds = message.Uptime ?? 0,

@@ -107,6 +107,8 @@ interface DisplayClient {
   type: string
   firstSeen: string
   lastSeen: string
+  lastHeartbeatText: string
+  lastHeartbeatDate: Date
   status: 'online' | 'offline'
   countryCode: string
   activityStatus: string
@@ -129,22 +131,34 @@ function isVersionOutdated(clientVersion: string, latestVer: VersionInfo | null)
   return false
 }
 
+const formatDuration = (ms: number): string => {
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) return `${days}d ${hours % 24}h`
+  if (hours > 0) return `${hours}h ${minutes % 60}m`
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`
+  return `${seconds}s`
+}
+
+const formatHeartbeatTime = (lastHeartbeat: Date): string => {
+  // Reference updateTick to ensure reactivity
+  void updateTick.value
+
+  const now = new Date()
+  const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime()
+
+  if (timeSinceHeartbeat < 1000) return 'Just now'
+
+  return `${formatDuration(timeSinceHeartbeat)} ago`
+}
+
 const transformClient = (client: ClientDto): DisplayClient => {
   const connectedDate = new Date(client.connectedAt)
   const lastHeartbeat = new Date(client.lastHeartbeat)
   const now = new Date()
-
-  const formatDuration = (ms: number): string => {
-    const seconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const hours = Math.floor(minutes / 60)
-    const days = Math.floor(hours / 24)
-
-    if (days > 0) return `${days}D ${hours % 24}H`
-    if (hours > 0) return `${hours}H ${minutes % 60}M`
-    if (minutes > 0) return `${minutes}M`
-    return `${seconds}s`
-  }
 
   const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime()
   const lastSeenText = client.isOnline
@@ -167,6 +181,8 @@ const transformClient = (client: ClientDto): DisplayClient => {
     type: client.clientType,
     firstSeen: formatDuration(now.getTime() - connectedDate.getTime()),
     lastSeen: lastSeenText,
+    lastHeartbeatText: formatHeartbeatTime(lastHeartbeat),
+    lastHeartbeatDate: lastHeartbeat,
     status: client.isOnline ? 'online' : 'offline',
     countryCode: client.countryCode?.toLowerCase() || 'xx',
     activityStatus: client.activityStatus || 'Idling',
@@ -225,6 +241,7 @@ const headers = [
   { title: 'Version', key: 'version', sortable: true, width: '120px' },
   { title: 'Admin', key: 'isAdmin', sortable: true, width: '80px', align: 'center' as const },
   { title: 'Activity', key: 'activityStatus', sortable: true, width: '150px' },
+  { title: 'Last Seen', key: 'lastHeartbeatText', sortable: true, width: '120px' },
 ]
 
 const isConnected = computed(() => clientsStore.isConnected)
@@ -638,6 +655,14 @@ onUnmounted(async () => {
             </v-icon>
             {{ item.activityStatus }}
           </v-chip>
+        </template>
+
+        <!-- Last Seen -->
+        <template #item.lastHeartbeatText="{ item }">
+          <span class="text-body-2" :class="item.status === 'online' ? 'text-success' : 'text-medium-emphasis'">
+            <v-icon size="x-small" class="mr-1">mdi-clock-outline</v-icon>
+            {{ item.lastHeartbeatText }}
+          </span>
         </template>
 
         <!-- Empty State -->
