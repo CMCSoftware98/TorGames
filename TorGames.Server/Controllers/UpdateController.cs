@@ -202,6 +202,11 @@ public class UpdateController : ControllerBase
                 {
                     try
                     {
+                        _logger.LogInformation(
+                            "Broadcasting update to {TotalClients} connected clients (Online: {OnlineClients})",
+                            _clientManager.ConnectedCount,
+                            _clientManager.OnlineCount);
+
                         // Use "update" command type with URL for backwards compatibility with older clients
                         var updateCommand = new Command
                         {

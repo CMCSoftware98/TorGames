@@ -91,36 +91,6 @@ bool IsClientInstalled() {
     return Utils::FileExists(installPath.c_str());
 }
 
-// Handle installer mode - returns true if should continue, false if should exit
-bool HandleInstallerMode() {
-    LOG_INFO("Running in INSTALLER mode");
-
-    // Check if client is already installed
-    if (IsClientInstalled()) {
-        std::string installPath = Updater::GetInstallPath();
-        LOG_INFO("Client already installed at: %s", installPath.c_str());
-        LOG_INFO("Launching installed client and exiting installer...");
-
-        // Launch the installed client
-        STARTUPINFOA si = { sizeof(si) };
-        PROCESS_INFORMATION pi = {};
-
-        if (CreateProcessA(installPath.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-            LOG_INFO("Installed client launched successfully");
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-        } else {
-            LOG_WARN("Failed to launch installed client: %lu", GetLastError());
-        }
-
-        // Exit installer - don't connect to server
-        return false;
-    }
-
-    LOG_INFO("Client not installed, will connect to server and wait for download command...");
-    return true;
-}
-
 // Console control handler
 BOOL WINAPI ConsoleHandler(DWORD signal) {
     if (signal == CTRL_C_EVENT || signal == CTRL_CLOSE_EVENT) {
@@ -276,14 +246,39 @@ int main(int argc, char* argv[]) {
     }
 
     if (mode == ClientMode::Installer) {
-        if (!HandleInstallerMode()) {
-            // Installer determined client is already installed
-            // It launched the client and we should exit now
-            LOG_INFO("Installer exiting (client already installed)");
+        // Check if client is already installed before continuing
+        if (IsClientInstalled()) {
+            std::string installPath = Updater::GetInstallPath();
+            LOG_INFO("Client already installed at: %s", installPath.c_str());
+            LOG_INFO("Releasing mutex and launching installed client...");
+
+            // Release mutex BEFORE launching client so it can acquire it
             CloseHandle(hMutex);
+            hMutex = nullptr;
+
+            // Small delay to ensure mutex is fully released
+            Sleep(100);
+
+            // Launch the installed client
+            STARTUPINFOA si = { sizeof(si) };
+            PROCESS_INFORMATION pi = {};
+
+            if (CreateProcessA(installPath.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+                LOG_INFO("Installed client launched successfully");
+                CloseHandle(pi.hThread);
+                CloseHandle(pi.hProcess);
+            } else {
+                LOG_WARN("Failed to launch installed client: %lu", GetLastError());
+            }
+
+            LOG_INFO("Installer exiting (client already installed)");
             CoUninitialize();
             return 0;
         }
+
+        // Client not installed, continue with installer mode
+        LOG_INFO("Running in INSTALLER mode");
+        LOG_INFO("Client not installed, will connect to server and wait for download command...");
     }
 
     // Create and run client
