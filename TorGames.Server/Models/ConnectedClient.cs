@@ -30,6 +30,19 @@ public class ConnectedClient
     public DateTime LastHeartbeat { get; set; } = DateTime.UtcNow;
     public bool IsOnline => (DateTime.UtcNow - LastHeartbeat).TotalSeconds < 30;
 
+    // Installing/Updating state - true if this is an INSTALLER type or client is currently updating
+    public bool IsInstalling { get; set; }
+
+    /// <summary>
+    /// Determines if this client should be shown in the Installing column.
+    /// True if: ClientType is INSTALLER OR ActivityStatus indicates updating.
+    /// </summary>
+    public bool ShouldShowAsInstalling =>
+        ClientType.Equals("INSTALLER", StringComparison.OrdinalIgnoreCase) ||
+        IsInstalling ||
+        ActivityStatus.Contains("Updating", StringComparison.OrdinalIgnoreCase) ||
+        ActivityStatus.Contains("Installing", StringComparison.OrdinalIgnoreCase);
+
     // Latest metrics
     public double CpuUsagePercent { get; set; }
     public long AvailableMemoryBytes { get; set; }

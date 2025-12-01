@@ -78,11 +78,19 @@ public class ClientHub : Hub
     }
 
     /// <summary>
-    /// Gets all online clients.
+    /// Gets all online clients (excluding those installing).
     /// </summary>
     public IEnumerable<ClientDto> GetOnlineClients()
     {
         return _clientManager.GetOnlineClients().Select(ClientDto.FromConnectedClient);
+    }
+
+    /// <summary>
+    /// Gets all clients currently installing/updating.
+    /// </summary>
+    public IEnumerable<ClientDto> GetInstallingClients()
+    {
+        return _clientManager.GetInstallingClients().Select(ClientDto.FromConnectedClient);
     }
 
     /// <summary>
@@ -171,7 +179,8 @@ public class ClientHub : Hub
         return new
         {
             TotalConnected = _clientManager.ConnectedCount,
-            OnlineCount = _clientManager.OnlineCount
+            OnlineCount = _clientManager.OnlineCount,
+            InstallingCount = _clientManager.InstallingCount
         };
     }
 

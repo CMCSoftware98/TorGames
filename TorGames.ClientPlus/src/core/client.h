@@ -4,24 +4,18 @@
 #include "common.h"
 #include "protocol.h"
 
-enum class ClientMode {
-    Installer,  // First run - installs and becomes client
-    Client      // Normal operation
-};
-
 class Client {
 public:
     Client();
     ~Client();
 
     // Initialize and run
-    bool Initialize(ClientMode mode);
+    bool Initialize();
     void Run();
     void Stop();
 
     // Getters
     bool IsRunning() const { return m_running; }
-    ClientMode GetMode() const { return m_mode; }
 
 private:
     // Connection management
@@ -40,9 +34,7 @@ private:
 
     // Members
     Protocol m_protocol;
-    ClientMode m_mode;
     std::string m_hardwareId;
-    std::string m_clientType;
 
     bool m_running;
     bool m_shouldReconnect;

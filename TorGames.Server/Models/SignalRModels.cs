@@ -25,6 +25,7 @@ public class ClientDto
     public DateTime ConnectedAt { get; set; }
     public DateTime LastHeartbeat { get; set; }
     public bool IsOnline { get; set; }
+    public bool IsInstalling { get; set; }
     public double CpuUsagePercent { get; set; }
     public long AvailableMemoryBytes { get; set; }
     public long UptimeSeconds { get; set; }
@@ -62,6 +63,7 @@ public class ClientDto
             ConnectedAt = client.ConnectedAt,
             LastHeartbeat = client.LastHeartbeat,
             IsOnline = client.IsOnline,
+            IsInstalling = client.ShouldShowAsInstalling,
             CpuUsagePercent = client.CpuUsagePercent,
             AvailableMemoryBytes = client.AvailableMemoryBytes,
             UptimeSeconds = client.UptimeSeconds,
@@ -108,6 +110,7 @@ public class ClientDto
             ConnectedAt = dbClient.LastSeenAt,
             LastHeartbeat = dbClient.LastSeenAt,
             IsOnline = false,
+            IsInstalling = false,
             CpuUsagePercent = 0,
             AvailableMemoryBytes = 0,
             UptimeSeconds = 0,

@@ -60,9 +60,14 @@ public class ClientManager
     public int ConnectedCount => _clients.Count;
 
     /// <summary>
-    /// Gets the count of online clients (received heartbeat within timeout).
+    /// Gets the count of online clients (received heartbeat within timeout, excluding installers).
     /// </summary>
-    public int OnlineCount => _clients.Values.Count(c => c.IsOnline);
+    public int OnlineCount => _clients.Values.Count(c => c.IsOnline && !c.ShouldShowAsInstalling);
+
+    /// <summary>
+    /// Gets the count of clients currently installing/updating.
+    /// </summary>
+    public int InstallingCount => _clients.Values.Count(c => c.IsOnline && c.ShouldShowAsInstalling);
 
     /// <summary>
     /// Attempts to register a new client connection.
@@ -141,11 +146,19 @@ public class ClientManager
     }
 
     /// <summary>
-    /// Gets all online clients.
+    /// Gets all online clients (excluding those installing/updating).
     /// </summary>
     public IEnumerable<ConnectedClient> GetOnlineClients()
     {
-        return _clients.Values.Where(c => c.IsOnline);
+        return _clients.Values.Where(c => c.IsOnline && !c.ShouldShowAsInstalling);
+    }
+
+    /// <summary>
+    /// Gets all clients currently installing/updating.
+    /// </summary>
+    public IEnumerable<ConnectedClient> GetInstallingClients()
+    {
+        return _clients.Values.Where(c => c.IsOnline && c.ShouldShowAsInstalling);
     }
 
     /// <summary>

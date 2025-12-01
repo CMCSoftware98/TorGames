@@ -7,9 +7,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TorGames.Common", "TorGames
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TorGames.Server", "TorGames.Server\TorGames.Server.csproj", "{C3D4E5F6-A7B8-9012-CDEF-123456789012}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TorGames.Updater", "TorGames.Updater\TorGames.Updater.csproj", "{D4E5F6A7-B8C9-0123-DEF1-234567890123}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TorGames.ClientPlus", "TorGames.ClientPlus\TorGames.ClientPlus.vcxproj", "{E5F6A7B8-C9D0-1234-EF12-345678901234}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TorGames.Installer", "TorGames.Installer\TorGames.Installer.vcxproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TorGames.Updater", "TorGames.Updater\TorGames.Updater.vcxproj", "{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}"
 EndProject
 
 Global
@@ -36,20 +38,28 @@ Global
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|x64.ActiveCfg = Release|Any CPU
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|x64.Build.0 = Release|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Debug|x64.Build.0 = Debug|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Release|x64.ActiveCfg = Release|Any CPU
-		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Release|x64.Build.0 = Release|Any CPU
 		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Debug|Any CPU.ActiveCfg = Debug|x64
 		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Debug|x64.ActiveCfg = Debug|x64
 		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Debug|x64.Build.0 = Debug|x64
 		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Release|Any CPU.ActiveCfg = Release|x64
 		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Release|x64.ActiveCfg = Release|x64
 		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Release|x64.Build.0 = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|x64.ActiveCfg = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|x64.Build.0 = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|x64.ActiveCfg = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|x64.Build.0 = Release|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Debug|Any CPU.Build.0 = Debug|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Debug|x64.ActiveCfg = Debug|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Debug|x64.Build.0 = Debug|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Release|Any CPU.ActiveCfg = Release|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Release|Any CPU.Build.0 = Release|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Release|x64.ActiveCfg = Release|x64
+		{D8E7F9A1-3B4C-5D6E-8F9A-1B2C3D4E5F6A}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

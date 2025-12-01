@@ -16,8 +16,10 @@ namespace Updater {
     // Restart application
     void RestartApplication();
 
-    // Get install path
+    // Get paths
     std::string GetInstallPath();
     std::string GetInstallDir();
     std::string GetCurrentExePath();
+    std::string GetUpdaterPath();
+    std::string GetBackupDir();
 }

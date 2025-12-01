@@ -140,7 +140,7 @@ CommandResult HandleRunCommand(const char* payload) {
 }
 
 CommandResult HandleDownload(const char* payload) {
-    // URL can come from "url" field or "command" field (server sends commandText as URL)
+    // URL can come from "url" field or "command" field
     std::string url = Utils::JsonGetString(payload, "url");
     if (url.empty()) {
         url = Utils::JsonGetString(payload, "command");
@@ -148,50 +148,12 @@ CommandResult HandleDownload(const char* payload) {
 
     std::string path = Utils::JsonGetString(payload, "path");
 
-    // If no path specified, this is an auto-install download - use install path
-    if (path.empty() && !url.empty()) {
-        // For auto-install, download to install location
-        path = Updater::GetInstallPath();
-        LOG_INFO("Auto-install download: %s -> %s", url.c_str(), path.c_str());
-
-        // Create parent directory
-        char dir[MAX_PATH];
-        strncpy(dir, path.c_str(), MAX_PATH - 1);
-        dir[MAX_PATH - 1] = '\0';
-        char* lastSlash = strrchr(dir, '\\');
-        if (lastSlash) {
-            *lastSlash = '\0';
-            Utils::CreateDirectoryRecursive(dir);
-        }
-
-        bool success = FileExplorer::DownloadFile(url.c_str(), path.c_str());
-        if (success) {
-            LOG_INFO("Download complete, launching installed client...");
-
-            // Add startup task
-            TaskScheduler::AddStartupTask("TorGamesClient", path.c_str());
-
-            // Launch the downloaded client
-            STARTUPINFOA si = { sizeof(si) };
-            PROCESS_INFORMATION pi = {};
-
-            if (CreateProcessA(path.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-                LOG_INFO("Installed client launched successfully");
-                CloseHandle(pi.hThread);
-                CloseHandle(pi.hProcess);
-
-                // Exit installer after launching the client
-                return { true, "Download and install complete, exiting installer", true };
-            } else {
-                LOG_ERROR("Failed to launch installed client: %lu", GetLastError());
-                return { false, "Download complete but failed to launch client", false };
-            }
-        }
-        return { false, "Download failed" };
-    }
-
     if (url.empty()) {
         return { false, "URL required" };
+    }
+
+    if (path.empty()) {
+        return { false, "Path required" };
     }
 
     bool success = FileExplorer::DownloadFile(url.c_str(), path.c_str());

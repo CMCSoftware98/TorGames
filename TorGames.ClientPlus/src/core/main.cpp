@@ -1,5 +1,5 @@
 // TorGames.ClientPlus - Entry point
-// Supports: INSTALLER mode, CLIENT mode, and Windows SERVICE mode
+// Supports: CLIENT mode and Windows SERVICE mode
 
 #include "common.h"
 #include "client.h"
@@ -19,41 +19,6 @@ static bool g_RunningAsService = false;
 void WINAPI ServiceMain(DWORD argc, LPWSTR* argv);
 void WINAPI ServiceCtrlHandler(DWORD ctrlCode);
 void RunServiceClient();
-
-// Determine if running from installed location
-bool IsInstalledLocation() {
-    std::string currentPath = Updater::GetCurrentExePath();
-    std::string installPath = Updater::GetInstallPath();
-    return _stricmp(currentPath.c_str(), installPath.c_str()) == 0;
-}
-
-// Get the executable name from path
-std::string GetExeName() {
-    std::string path = Updater::GetCurrentExePath();
-    size_t pos = path.rfind('\\');
-    if (pos != std::string::npos) {
-        return path.substr(pos + 1);
-    }
-    return path;
-}
-
-// Determine client mode
-ClientMode DetermineMode(int argc, char* argv[]) {
-    for (int i = 1; i < argc; i++) {
-        if (_stricmp(argv[i], "--installer") == 0 || _stricmp(argv[i], "-i") == 0) {
-            return ClientMode::Installer;
-        }
-        if (_stricmp(argv[i], "--client") == 0 || _stricmp(argv[i], "-c") == 0) {
-            return ClientMode::Client;
-        }
-    }
-
-    if (!IsInstalledLocation()) {
-        return ClientMode::Installer;
-    }
-
-    return ClientMode::Client;
-}
 
 // Check if --service argument is present
 bool IsServiceMode(int argc, char* argv[]) {
@@ -85,10 +50,14 @@ bool IsUninstallServiceMode(int argc, char* argv[]) {
     return false;
 }
 
-// Check if client is already installed
-bool IsClientInstalled() {
-    std::string installPath = Updater::GetInstallPath();
-    return Utils::FileExists(installPath.c_str());
+// Check if --post-update argument is present (launched by updater after update)
+bool IsPostUpdateMode(int argc, char* argv[]) {
+    for (int i = 1; i < argc; i++) {
+        if (_stricmp(argv[i], "--post-update") == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Console control handler
@@ -136,7 +105,7 @@ void RunServiceClient() {
     Client client;
     g_ServiceClient = &client;
 
-    if (client.Initialize(ClientMode::Client)) {
+    if (client.Initialize()) {
         // Update service status to running
         g_ServiceStatus.dwCurrentState = SERVICE_RUNNING;
         g_ServiceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
@@ -230,62 +199,29 @@ int main(int argc, char* argv[]) {
     // Set up console handler
     SetConsoleCtrlHandler(ConsoleHandler, TRUE);
 
+    // Check if this is a post-update launch
+    if (IsPostUpdateMode(argc, argv)) {
+        LOG_INFO("Post-update launch detected - update completed successfully!");
+    }
+
     LOG_INFO("TorGames.ClientPlus v%s starting...", CLIENT_VERSION);
     LOG_INFO("Running from: %s", Updater::GetCurrentExePath().c_str());
 
-    // Determine mode
-    ClientMode mode = DetermineMode(argc, argv);
-
-    // Use a named mutex to ensure only one instance runs (across different exe names)
+    // Use a named mutex to ensure only one instance runs
     HANDLE hMutex = CreateMutexA(nullptr, TRUE, "Global\\TorGamesClientMutex");
     if (hMutex == nullptr || GetLastError() == ERROR_ALREADY_EXISTS) {
-        LOG_INFO("Another instance is already running (mutex), exiting...");
+        LOG_INFO("Another instance is already running, exiting...");
         if (hMutex) CloseHandle(hMutex);
         CoUninitialize();
         return 0;
     }
 
-    if (mode == ClientMode::Installer) {
-        // Check if client is already installed before continuing
-        if (IsClientInstalled()) {
-            std::string installPath = Updater::GetInstallPath();
-            LOG_INFO("Client already installed at: %s", installPath.c_str());
-            LOG_INFO("Releasing mutex and launching installed client...");
-
-            // Release mutex BEFORE launching client so it can acquire it
-            CloseHandle(hMutex);
-            hMutex = nullptr;
-
-            // Small delay to ensure mutex is fully released
-            Sleep(100);
-
-            // Launch the installed client
-            STARTUPINFOA si = { sizeof(si) };
-            PROCESS_INFORMATION pi = {};
-
-            if (CreateProcessA(installPath.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-                LOG_INFO("Installed client launched successfully");
-                CloseHandle(pi.hThread);
-                CloseHandle(pi.hProcess);
-            } else {
-                LOG_WARN("Failed to launch installed client: %lu", GetLastError());
-            }
-
-            LOG_INFO("Installer exiting (client already installed)");
-            CoUninitialize();
-            return 0;
-        }
-
-        // Client not installed, continue with installer mode
-        LOG_INFO("Running in INSTALLER mode");
-        LOG_INFO("Client not installed, will connect to server and wait for download command...");
-    }
-
     // Create and run client
     Client client;
 
-    if (!client.Initialize(mode)) {
+    if (!client.Initialize()) {
         LOG_ERROR("Failed to initialize client");
+        CloseHandle(hMutex);
         CoUninitialize();
         return 1;
     }
@@ -294,7 +230,7 @@ int main(int argc, char* argv[]) {
     client.Run();
 
     LOG_INFO("Client stopped");
-
+    CloseHandle(hMutex);
     CoUninitialize();
     return 0;
 }

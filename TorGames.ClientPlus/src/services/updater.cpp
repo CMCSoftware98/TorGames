@@ -34,6 +34,21 @@ std::string GetInstallDir() {
     return "C:\\Users\\Public\\TorGames";
 }
 
+std::string GetUpdaterPath() {
+    // Updater lives next to the client executable
+    std::string currentPath = GetCurrentExePath();
+    size_t lastSlash = currentPath.find_last_of("\\/");
+    if (lastSlash != std::string::npos) {
+        return currentPath.substr(0, lastSlash + 1) + "TorGames.Updater.exe";
+    }
+    return "TorGames.Updater.exe";
+}
+
+std::string GetBackupDir() {
+    std::string installDir = GetInstallDir();
+    return installDir + "\\backups";
+}
+
 bool DownloadAndInstall(const char* downloadUrl) {
     LOG_INFO("Downloading update from: %s", downloadUrl);
 
@@ -56,6 +71,9 @@ bool DownloadAndInstall(const char* downloadUrl) {
     }
 
     std::string installPath = GetInstallPath();
+    std::string updaterPath = GetUpdaterPath();
+    std::string backupDir = GetBackupDir();
+
     LOG_INFO("Installing to: %s", installPath.c_str());
 
     // Create target directory
@@ -68,7 +86,49 @@ bool DownloadAndInstall(const char* downloadUrl) {
         Utils::CreateDirectoryRecursive(dir);
     }
 
-    // Create batch script to replace running executable
+    // Create backup directory
+    Utils::CreateDirectoryRecursive(backupDir.c_str());
+
+    // Get current process ID
+    DWORD currentPid = GetCurrentProcessId();
+
+    // Check if TorGames.Updater.exe exists
+    if (Utils::FileExists(updaterPath.c_str())) {
+        LOG_INFO("Using TorGames.Updater.exe for crash-proof update");
+
+        // Build command line: TorGames.Updater.exe <targetPath> <newFilePath> <backupDir> <parentPid>
+        char cmdLine[2048];
+        snprintf(cmdLine, sizeof(cmdLine),
+            "\"%s\" \"%s\" \"%s\" \"%s\" %lu",
+            updaterPath.c_str(),
+            installPath.c_str(),
+            downloadPath,
+            backupDir.c_str(),
+            currentPid);
+
+        LOG_INFO("Launching updater: %s", cmdLine);
+
+        STARTUPINFOA si = { sizeof(si) };
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+
+        PROCESS_INFORMATION pi = {};
+
+        if (CreateProcessA(nullptr, cmdLine, nullptr, nullptr, FALSE,
+            CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            LOG_INFO("TorGames.Updater launched, exiting client...");
+            return true;
+        }
+
+        LOG_ERROR("Failed to launch TorGames.Updater: %lu", GetLastError());
+        // Fall through to batch script fallback
+    }
+
+    LOG_INFO("Using batch script fallback for update");
+
+    // Fallback: Create batch script to replace running executable
     char batchPath[MAX_PATH];
     snprintf(batchPath, sizeof(batchPath), "%sTorGames_Update.bat", tempPath);
 
