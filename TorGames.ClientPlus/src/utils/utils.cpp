@@ -45,10 +45,35 @@ std::string JsonEscape(const std::string& str) {
     return result;
 }
 
+// Decode unicode escapes like \u0022 to their actual characters
+std::string DecodeUnicodeEscapes(const std::string& str) {
+    std::string result;
+    result.reserve(str.size());
+
+    for (size_t i = 0; i < str.size(); i++) {
+        if (str[i] == '\\' && i + 5 < str.size() && str[i + 1] == 'u') {
+            // Parse 4 hex digits
+            char hex[5] = {str[i + 2], str[i + 3], str[i + 4], str[i + 5], 0};
+            int codepoint = strtol(hex, nullptr, 16);
+            if (codepoint > 0 && codepoint < 128) {
+                result += static_cast<char>(codepoint);
+                i += 5; // Skip \uXXXX (loop will add 1 more)
+                continue;
+            }
+        }
+        result += str[i];
+    }
+    return result;
+}
+
 std::string JsonGetString(const char* json, const char* key) {
+    // First try to decode unicode escapes in the JSON
+    std::string decoded = DecodeUnicodeEscapes(json);
+    const char* jsonStr = decoded.c_str();
+
     char pattern[128];
     snprintf(pattern, sizeof(pattern), "\"%s\":\"", key);
-    const char* start = strstr(json, pattern);
+    const char* start = strstr(jsonStr, pattern);
     if (!start) return "";
     start += strlen(pattern);
     const char* end = strchr(start, '"');
