@@ -71,10 +71,24 @@ public class ClientManager
 
     /// <summary>
     /// Attempts to register a new client connection.
-    /// Returns false if a client with the same connection key is already connected.
+    /// If a client with the same connection key exists, it will be replaced (handles reconnection).
     /// </summary>
     public (bool Success, string? RejectionReason) TryRegisterClient(ConnectedClient client)
     {
+        // Check if there's an existing client with the same key
+        if (_clients.TryGetValue(client.ConnectionKey, out var existingClient))
+        {
+            // Replace the existing client (this handles reconnection scenarios)
+            _logger.LogInformation(
+                "Replacing existing client connection: {ConnectionKey} ({MachineName})",
+                client.ConnectionKey,
+                client.MachineName);
+
+            // Remove the old client first
+            _clients.TryRemove(client.ConnectionKey, out _);
+            ClientDisconnected?.Invoke(this, new ClientEventArgs { Client = existingClient });
+        }
+
         if (_clients.TryAdd(client.ConnectionKey, client))
         {
             _logger.LogInformation(
@@ -88,10 +102,11 @@ public class ClientManager
             return (true, null);
         }
 
+        // This shouldn't happen after we removed the existing client, but handle it just in case
         _logger.LogWarning(
-            "Client registration rejected - already connected: {ConnectionKey}",
+            "Client registration failed unexpectedly: {ConnectionKey}",
             client.ConnectionKey);
-        return (false, "A client with this ID and type is already connected");
+        return (false, "Failed to register client");
     }
 
     /// <summary>
