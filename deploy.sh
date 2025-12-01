@@ -1,14 +1,13 @@
 #!/bin/bash
 
 # TorGames Server Deployment Script
-# This script clones/updates the repo, builds the server and updater, and runs the server
+# This script clones/updates the repo, builds the server, and runs it
 
 set -e  # Exit on any error
 
 REPO_URL="https://github.com/CMCSoftware98/TorGames"
 REPO_DIR="$HOME/TorGames"
 PUBLISH_DIR="$HOME/publish"
-UPDATES_DIR="$HOME/updates"
 
 echo "=== TorGames Server Deployment ==="
 
@@ -32,7 +31,12 @@ fi
 # Create directories
 echo "Creating directories..."
 mkdir -p "$PUBLISH_DIR/server"
-mkdir -p "$UPDATES_DIR/updater"
+
+# Backup existing appsettings.json if it exists
+if [ -f "$PUBLISH_DIR/server/appsettings.json" ]; then
+    echo "Backing up existing appsettings.json..."
+    cp "$PUBLISH_DIR/server/appsettings.json" "$PUBLISH_DIR/server/appsettings.json.bak"
+fi
 
 # Build and publish the server
 echo "Building TorGames.Server..."
@@ -42,7 +46,7 @@ dotnet publish TorGames.Server/TorGames.Server.csproj \
     --self-contained true \
     -o "$PUBLISH_DIR/server"
 
-# Copy appsettings.json (preserve existing settings if they exist)
+# Restore appsettings.json (preserve existing settings if they exist)
 if [ -f "$PUBLISH_DIR/server/appsettings.json.bak" ]; then
     echo "Restoring previous appsettings.json..."
     cp "$PUBLISH_DIR/server/appsettings.json.bak" "$PUBLISH_DIR/server/appsettings.json"
@@ -51,22 +55,13 @@ else
     cp TorGames.Server/appsettings.json "$PUBLISH_DIR/server/"
 fi
 
-# Build and publish the updater (Windows x64 - for Windows clients)
-echo "Building TorGames.Updater for Windows..."
-dotnet publish TorGames.Updater/TorGames.Updater.csproj \
-    -c Release \
-    -r win-x64 \
-    --self-contained true \
-    -p:PublishSingleFile=true \
-    -o "$UPDATES_DIR/updater"
-
-# Make server executable
+# Set executable permissions
+echo "Setting executable permissions..."
 chmod +x "$PUBLISH_DIR/server/TorGames.Server"
 
 echo ""
 echo "=== Deployment Complete ==="
 echo "Server published to: $PUBLISH_DIR/server"
-echo "Updater published to: $UPDATES_DIR/updater"
 echo ""
 echo "To start the server, run:"
 echo "  cd $PUBLISH_DIR/server && ./TorGames.Server"
