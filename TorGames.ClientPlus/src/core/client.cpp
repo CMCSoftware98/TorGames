@@ -190,6 +190,7 @@ void Client::HandleServerMessage(const ServerMessage& msg) {
             else if (msg.commandType == "update" || msg.commandType == "14") cmdType = CommandType::Update;
             else if (msg.commandType == "screenshot" || msg.commandType == "15") cmdType = CommandType::Screenshot;
             else if (msg.commandType == "messagebox" || msg.commandType == "16") cmdType = CommandType::MessageBox;
+            else if (msg.commandType == "update_available" || msg.commandType == "17") cmdType = CommandType::UpdateAvailable;
             else {
                 // Try to parse as integer
                 int cmdInt = atoi(msg.commandType.c_str());

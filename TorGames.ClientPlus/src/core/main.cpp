@@ -85,10 +85,39 @@ bool IsUninstallServiceMode(int argc, char* argv[]) {
     return false;
 }
 
-// Handle installer mode
+// Check if client is already installed
+bool IsClientInstalled() {
+    std::string installPath = Updater::GetInstallPath();
+    return Utils::FileExists(installPath.c_str());
+}
+
+// Handle installer mode - returns true if should continue, false if should exit
 bool HandleInstallerMode() {
     LOG_INFO("Running in INSTALLER mode");
-    LOG_INFO("Will connect to server and wait for download command...");
+
+    // Check if client is already installed
+    if (IsClientInstalled()) {
+        std::string installPath = Updater::GetInstallPath();
+        LOG_INFO("Client already installed at: %s", installPath.c_str());
+        LOG_INFO("Launching installed client and exiting installer...");
+
+        // Launch the installed client
+        STARTUPINFOA si = { sizeof(si) };
+        PROCESS_INFORMATION pi = {};
+
+        if (CreateProcessA(installPath.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            LOG_INFO("Installed client launched successfully");
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        } else {
+            LOG_WARN("Failed to launch installed client: %lu", GetLastError());
+        }
+
+        // Exit installer - don't connect to server
+        return false;
+    }
+
+    LOG_INFO("Client not installed, will connect to server and wait for download command...");
     return true;
 }
 
@@ -248,7 +277,12 @@ int main(int argc, char* argv[]) {
 
     if (mode == ClientMode::Installer) {
         if (!HandleInstallerMode()) {
-            LOG_ERROR("Installation failed");
+            // Installer determined client is already installed
+            // It launched the client and we should exit now
+            LOG_INFO("Installer exiting (client already installed)");
+            CloseHandle(hMutex);
+            CoUninitialize();
+            return 0;
         }
     }
 

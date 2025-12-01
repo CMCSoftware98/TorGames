@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { getVersions, uploadVersion, deleteVersion, getVersionDownloadUrl } from '@/services/api'
+import { getVersions, uploadVersion, deleteVersion, promoteVersion, getVersionDownloadUrl } from '@/services/api'
 import type { VersionInfo } from '@/types/version'
 import ServerStatsPanel from '@/components/ServerStatsPanel.vue'
 
@@ -26,6 +26,11 @@ const uploadError = ref<string | null>(null)
 const deleteDialog = ref(false)
 const deleteLoading = ref(false)
 const versionToDelete = ref<VersionInfo | null>(null)
+
+// Promote dialog
+const promoteDialog = ref(false)
+const promoteLoading = ref(false)
+const versionToPromote = ref<VersionInfo | null>(null)
 
 // Snackbar
 const snackbar = ref({
@@ -182,6 +187,56 @@ function downloadVersion(version: VersionInfo) {
   window.open(url, '_blank')
 }
 
+function openPromoteDialog(version: VersionInfo) {
+  versionToPromote.value = version
+  promoteDialog.value = true
+}
+
+async function handlePromote() {
+  if (!versionToPromote.value) return
+
+  promoteLoading.value = true
+
+  try {
+    const token = authStore.sessionToken
+    if (!token) {
+      snackbar.value = {
+        show: true,
+        message: 'Not authenticated',
+        color: 'error'
+      }
+      return
+    }
+
+    const result = await promoteVersion(token, versionToPromote.value.version)
+
+    if (result.success) {
+      promoteDialog.value = false
+      snackbar.value = {
+        show: true,
+        message: `Version ${versionToPromote.value.version} promoted to production`,
+        color: 'success'
+      }
+      await loadVersions()
+    } else {
+      snackbar.value = {
+        show: true,
+        message: result.error || 'Promotion failed',
+        color: 'error'
+      }
+    }
+  } catch (e) {
+    snackbar.value = {
+      show: true,
+      message: e instanceof Error ? e.message : 'Promotion failed',
+      color: 'error'
+    }
+  } finally {
+    promoteLoading.value = false
+    versionToPromote.value = null
+  }
+}
+
 onMounted(() => {
   loadVersions()
 })
@@ -321,6 +376,18 @@ onMounted(() => {
 
         <template #item.actions="{ item }">
           <div class="d-flex justify-end">
+            <v-btn
+              v-if="item.isTestVersion"
+              icon="mdi-rocket-launch"
+              variant="text"
+              size="small"
+              color="success"
+              @click="openPromoteDialog(item)"
+              class="mr-1"
+            >
+              <v-icon>mdi-rocket-launch</v-icon>
+              <v-tooltip activator="parent" location="top">Promote to Production</v-tooltip>
+            </v-btn>
             <v-btn
               icon="mdi-download"
               variant="text"
@@ -468,6 +535,50 @@ onMounted(() => {
             @click="handleDelete"
           >
             Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Promote Confirmation Dialog -->
+    <v-dialog v-model="promoteDialog" max-width="450">
+      <v-card class="glass-panel rounded-xl border-none">
+        <v-card-title class="d-flex align-center px-6 py-4">
+          <v-icon color="success" class="mr-2">mdi-rocket-launch</v-icon>
+          Promote to Production
+        </v-card-title>
+
+        <v-card-text class="px-6">
+          <p class="mb-4">
+            Are you sure you want to promote version <strong class="text-success">{{ versionToPromote?.version }}</strong> from test to production?
+          </p>
+          <v-alert type="info" density="compact" variant="tonal" class="rounded-lg">
+            <template #prepend>
+              <v-icon color="info" size="small">mdi-information</v-icon>
+            </template>
+            <div class="text-caption">
+              All connected clients will be notified and will update to this version.
+            </div>
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions class="px-6 pb-6">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            :disabled="promoteLoading"
+            @click="promoteDialog = false"
+          >
+            Cancel
+          </v-btn>
+          <v-btn
+            color="success"
+            variant="elevated"
+            :loading="promoteLoading"
+            @click="handlePromote"
+          >
+            <v-icon start>mdi-rocket-launch</v-icon>
+            Promote
           </v-btn>
         </v-card-actions>
       </v-card>

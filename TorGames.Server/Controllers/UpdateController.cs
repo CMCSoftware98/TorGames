@@ -192,6 +192,9 @@ public class UpdateController : ControllerBase
             _logger.LogInformation("{Type} version {Version} uploaded successfully",
                 isTestVersion ? "Test" : "Production", extractedVersion);
 
+            // Build the update command - use "update" type with URL for backwards compatibility
+            var downloadUrl = $"https://{Request.Host.Host}:{Request.Host.Port ?? 5001}/api/update/download/{extractedVersion}";
+
             // Only notify clients for production versions (test versions are targeted)
             if (!isTestVersion)
             {
@@ -199,12 +202,13 @@ public class UpdateController : ControllerBase
                 {
                     try
                     {
+                        // Use "update" command type with URL for backwards compatibility with older clients
                         var updateCommand = new Command
                         {
                             CommandId = Guid.NewGuid().ToString(),
-                            CommandType = "update_available",
-                            CommandText = extractedVersion,
-                            TimeoutSeconds = 0
+                            CommandType = "update",
+                            CommandText = $"{{\"url\":\"{downloadUrl}\"}}",
+                            TimeoutSeconds = 300
                         };
 
                         var clientCount = await _clientManager.BroadcastCommandToAllAsync(updateCommand);
@@ -226,12 +230,13 @@ public class UpdateController : ControllerBase
                 {
                     try
                     {
+                        // Use "update" command type with URL for backwards compatibility with older clients
                         var updateCommand = new Command
                         {
                             CommandId = Guid.NewGuid().ToString(),
-                            CommandType = "update_available",
-                            CommandText = extractedVersion,
-                            TimeoutSeconds = 0
+                            CommandType = "update",
+                            CommandText = $"{{\"url\":\"{downloadUrl}\"}}",
+                            TimeoutSeconds = 300
                         };
 
                         var clientCount = await _clientManager.BroadcastCommandToTestClientsAsync(updateCommand);
@@ -301,5 +306,54 @@ public class UpdateController : ControllerBase
     {
         var isValid = _updateService.IsValidNewVersion(version);
         return Ok(isValid);
+    }
+
+    /// <summary>
+    /// Promotes a test version to production.
+    /// </summary>
+    [HttpPost("promote/{version}")]
+    [Authorize]
+    public async Task<ActionResult<VersionInfo>> PromoteVersion(string version)
+    {
+        try
+        {
+            var versionInfo = _updateService.PromoteTestToProduction(version);
+            if (versionInfo == null)
+                return NotFound($"Version {version} not found");
+
+            _logger.LogInformation("Version {Version} promoted to production", version);
+
+            // Notify all clients about the new production version
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var updateCommand = new Command
+                    {
+                        CommandId = Guid.NewGuid().ToString(),
+                        CommandType = "update_available",
+                        CommandText = version,
+                        TimeoutSeconds = 0
+                    };
+
+                    var clientCount = await _clientManager.BroadcastCommandToAllAsync(updateCommand);
+                    _logger.LogInformation(
+                        "Notified {ClientCount} clients about promoted version {Version}",
+                        clientCount,
+                        version);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to notify clients about promoted version");
+                }
+            });
+
+            return Ok(versionInfo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to promote version {Version}", version);
+            return StatusCode(500, $"Failed to promote version: {ex.Message}");
+        }
     }
 }

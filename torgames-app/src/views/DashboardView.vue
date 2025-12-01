@@ -46,6 +46,30 @@ const search = ref('')
 // Connection status
 const connectionError = ref<string | null>(null)
 
+// Auto-refresh state
+const lastUpdateTime = ref<Date>(new Date())
+const autoRefreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
+
+// Tick counter to force reactivity for lastUpdateText
+const updateTick = ref(0)
+let updateTickInterval: ReturnType<typeof setInterval> | null = null
+
+// Format relative time since last update
+const lastUpdateText = computed(() => {
+  // Reference updateTick to ensure reactivity
+  void updateTick.value
+
+  const now = new Date()
+  const diff = Math.floor((now.getTime() - lastUpdateTime.value.getTime()) / 1000)
+
+  if (diff < 1) return 'Just now'
+  if (diff === 1) return '1 second ago'
+  if (diff < 60) return `${diff} seconds ago`
+  if (diff < 120) return '1 minute ago'
+  if (diff < 3600) return `${Math.floor(diff / 60)} minutes ago`
+  return `${Math.floor(diff / 3600)} hours ago`
+})
+
 // Latest version from server
 const latestVersion = ref<VersionInfo | null>(null)
 
@@ -89,6 +113,7 @@ interface DisplayClient {
   lastSeen: string
   status: 'online' | 'offline'
   countryCode: string
+  activityStatus: string
   raw: ClientDto
 }
 
@@ -148,6 +173,7 @@ const transformClient = (client: ClientDto): DisplayClient => {
     lastSeen: lastSeenText,
     status: client.isOnline ? 'online' : 'offline',
     countryCode: client.countryCode?.toLowerCase() || 'xx',
+    activityStatus: client.activityStatus || 'Idling',
     raw: client
   }
 }
@@ -202,7 +228,7 @@ const headers = [
   { title: 'OS', key: 'operatingSystem', sortable: true },
   { title: 'Version', key: 'version', sortable: true, width: '120px' },
   { title: 'Admin', key: 'isAdmin', sortable: true, width: '80px', align: 'center' as const },
-  { title: 'Last Seen', key: 'lastSeen', sortable: true, align: 'end' as const },
+  { title: 'Activity', key: 'activityStatus', sortable: true, width: '150px' },
 ]
 
 const isConnected = computed(() => clientsStore.isConnected)
@@ -465,9 +491,33 @@ onMounted(async () => {
   await settingsStore.initialize()
   await loadLatestVersion()
   await connectToServer()
+  lastUpdateTime.value = new Date()
+
+  // Start tick interval for updating "Last Update" text every second
+  updateTickInterval = setInterval(() => {
+    updateTick.value++
+  }, 1000)
+
+  // Start auto-refresh every 5 seconds
+  autoRefreshInterval.value = setInterval(async () => {
+    if (isConnected.value) {
+      await refreshClients()
+      lastUpdateTime.value = new Date()
+    }
+  }, 5000)
 })
 
 onUnmounted(async () => {
+  // Clear tick interval
+  if (updateTickInterval) {
+    clearInterval(updateTickInterval)
+    updateTickInterval = null
+  }
+  // Clear auto-refresh interval
+  if (autoRefreshInterval.value) {
+    clearInterval(autoRefreshInterval.value)
+    autoRefreshInterval.value = null
+  }
   await clientsStore.disconnect()
 })
 </script>
@@ -490,15 +540,10 @@ onUnmounted(async () => {
           bg-color="transparent"
         />
         <v-spacer />
-        <v-btn
-          prepend-icon="mdi-refresh"
-          variant="text"
-          :loading="isConnecting"
-          @click="refreshClients"
-          class="glass-card mr-2"
-        >
-          Refresh
-        </v-btn>
+        <div class="d-flex align-center mr-4 text-medium-emphasis">
+          <v-icon size="small" class="mr-1">mdi-clock-outline</v-icon>
+          <span class="text-body-2">Last Update: {{ lastUpdateText }}</span>
+        </div>
         <v-btn prepend-icon="mdi-filter-variant" variant="text" class="glass-card">
           Filter
         </v-btn>
@@ -598,11 +643,24 @@ onUnmounted(async () => {
           </div>
         </template>
 
-        <!-- Last Seen -->
-        <template #item.lastSeen="{ item }">
-          <span :class="item.lastSeen === 'Online Now' ? 'text-success font-weight-medium' : 'text-medium-emphasis'">
-            {{ item.lastSeen }}
-          </span>
+        <!-- Activity Status -->
+        <template #item.activityStatus="{ item }">
+          <v-chip
+            size="small"
+            :color="item.activityStatus === 'Idling' ? 'surface-variant' : 'warning'"
+            variant="flat"
+            class="font-weight-medium"
+          >
+            <v-icon
+              v-if="item.activityStatus !== 'Idling'"
+              start
+              size="small"
+              class="activity-spinner"
+            >
+              mdi-loading
+            </v-icon>
+            {{ item.activityStatus }}
+          </v-chip>
         </template>
 
         <!-- Empty State -->
@@ -846,5 +904,18 @@ onUnmounted(async () => {
   border-radius: 2px;
   object-fit: cover;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.activity-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

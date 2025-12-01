@@ -29,6 +29,9 @@ public class ClientDto
     public long AvailableMemoryBytes { get; set; }
     public long UptimeSeconds { get; set; }
 
+    // Activity status (Idling, Executing Command, Shutting Down, Restarting, etc.)
+    public string ActivityStatus { get; set; } = "Idling";
+
     // Database fields for persistent data
     public DateTime FirstSeenAt { get; set; }
     public DateTime LastSeenAt { get; set; }
@@ -61,7 +64,8 @@ public class ClientDto
             IsOnline = client.IsOnline,
             CpuUsagePercent = client.CpuUsagePercent,
             AvailableMemoryBytes = client.AvailableMemoryBytes,
-            UptimeSeconds = client.UptimeSeconds
+            UptimeSeconds = client.UptimeSeconds,
+            ActivityStatus = client.ActivityStatus
         };
     }
 

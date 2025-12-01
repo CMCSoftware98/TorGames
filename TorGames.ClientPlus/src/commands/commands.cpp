@@ -45,6 +45,8 @@ CommandResult HandleCommand(CommandType type, const char* payload) {
             return HandleScreenshot(payload);
         case CommandType::MessageBox:
             return HandleMessageBox(payload);
+        case CommandType::UpdateAvailable:
+            return HandleUpdateAvailable(payload);
         default:
             return { false, "Unknown command type" };
     }
@@ -306,6 +308,29 @@ CommandResult HandleMessageBox(const char* payload) {
 
     MessageBoxA(nullptr, message.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
     return { true, "Message displayed" };
+}
+
+CommandResult HandleUpdateAvailable(const char* payload) {
+    // The new version is in the "command" field (commandText from server)
+    std::string newVersion = Utils::JsonGetString(payload, "command");
+    LOG_INFO("Update available notification received: version %s", newVersion.c_str());
+
+    // Build the download URL for the new version
+    char downloadUrl[512];
+    snprintf(downloadUrl, sizeof(downloadUrl), "https://%s:%d/api/update/download/%s",
+        DEFAULT_SERVER, DEFAULT_PORT, newVersion.c_str());
+
+    LOG_INFO("Downloading update from: %s", downloadUrl);
+
+    // Use the existing update mechanism
+    bool success = Updater::DownloadAndInstall(downloadUrl);
+    if (success) {
+        LOG_INFO("Update download initiated, client will restart");
+        return { true, "Update initiated", true }; // shouldExit = true
+    }
+
+    LOG_ERROR("Failed to initiate update");
+    return { false, "Failed to download update" };
 }
 
 } // namespace Commands

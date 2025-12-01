@@ -107,6 +107,14 @@ public class ClientHub : Hub
             TimeoutSeconds = request.TimeoutSeconds
         };
 
+        // Update activity status based on command type
+        var client = _clientManager.GetClient(request.ConnectionKey);
+        if (client != null)
+        {
+            var activityStatus = GetActivityStatusForCommand(request.CommandType);
+            client.SetActivityStatus(activityStatus);
+        }
+
         // Check if this is a TCP client
         if (_tcpService != null && _tcpService.IsTcpClient(request.ConnectionKey))
         {
@@ -116,6 +124,32 @@ public class ClientHub : Hub
 
         // Fall back to gRPC client
         return await _clientManager.SendCommandAsync(request.ConnectionKey, command);
+    }
+
+    /// <summary>
+    /// Gets a human-readable activity status for a command type.
+    /// </summary>
+    private static string GetActivityStatusForCommand(string commandType)
+    {
+        return commandType.ToLowerInvariant() switch
+        {
+            "shutdown" => "Shutting Down...",
+            "restart" => "Restarting...",
+            "uninstall" => "Uninstalling...",
+            "update" => "Updating...",
+            "download" => "Downloading...",
+            "upload" => "Uploading...",
+            "shell" or "cmd" => "Executing Command...",
+            "screenshot" => "Taking Screenshot...",
+            "processlist" => "Fetching Processes...",
+            "systeminfo" => "Fetching System Info...",
+            "listdir" => "Browsing Files...",
+            "deletefile" => "Deleting File...",
+            "killprocess" => "Killing Process...",
+            "messagebox" => "Showing Message...",
+            "ping" => "Pinging...",
+            _ => "Executing..."
+        };
     }
 
     /// <summary>

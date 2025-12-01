@@ -359,6 +359,51 @@ public class UpdateService
     }
 
     /// <summary>
+    /// Promotes a test version to production.
+    /// </summary>
+    /// <param name="version">The version to promote</param>
+    /// <returns>The updated version info, or null if not found</returns>
+    public VersionInfo? PromoteTestToProduction(string version)
+    {
+        lock (_manifestLock)
+        {
+            var manifest = LoadManifest();
+            var versionInfo = manifest.Versions.FirstOrDefault(v => v.Version == version);
+
+            if (versionInfo == null)
+            {
+                _logger.LogWarning("Version {Version} not found", version);
+                return null;
+            }
+
+            if (!versionInfo.IsTestVersion)
+            {
+                _logger.LogWarning("Version {Version} is already a production version", version);
+                return versionInfo;
+            }
+
+            // Update the version to be a production version
+            versionInfo.IsTestVersion = false;
+            manifest.LatestVersion = version;
+
+            // Clear test version pointer if this was the latest test version
+            if (manifest.LatestTestVersion == version)
+            {
+                var newLatestTest = manifest.Versions
+                    .Where(v => v.IsTestVersion && v.Version != version)
+                    .OrderByDescending(v => ParseVersion(v.Version))
+                    .FirstOrDefault();
+                manifest.LatestTestVersion = newLatestTest?.Version ?? string.Empty;
+            }
+
+            SaveManifest(manifest);
+
+            _logger.LogInformation("Promoted version {Version} from test to production", version);
+            return versionInfo;
+        }
+    }
+
+    /// <summary>
     /// Validates that a new version is higher than all existing versions of the same type.
     /// </summary>
     /// <param name="newVersion">The new version string</param>

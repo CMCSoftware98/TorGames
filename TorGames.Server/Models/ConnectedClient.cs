@@ -36,6 +36,19 @@ public class ConnectedClient
     public long AvailableMemoryBytes { get; set; }
     public long UptimeSeconds { get; set; }
 
+    // Activity status (Idling, Executing Command, Shutting Down, Restarting, etc.)
+    public string ActivityStatus { get; set; } = "Idling";
+    public DateTime ActivityStatusUpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Updates the activity status of the client.
+    /// </summary>
+    public void SetActivityStatus(string status)
+    {
+        ActivityStatus = status;
+        ActivityStatusUpdatedAt = DateTime.UtcNow;
+    }
+
     // Detailed system info (cached from last request)
     public DetailedSystemInfo? LastDetailedSystemInfo { get; set; }
     public DateTime? LastDetailedSystemInfoTime { get; set; }

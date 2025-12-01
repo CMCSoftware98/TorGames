@@ -21,7 +21,8 @@ enum class CommandType {
     Uninstall = 13,
     Update = 14,
     Screenshot = 15,
-    MessageBox = 16
+    MessageBox = 16,
+    UpdateAvailable = 17
 };
 
 // Incoming message from server

@@ -21,6 +21,8 @@ export interface ClientDto {
   cpuUsagePercent: number
   availableMemoryBytes: number
   uptimeSeconds: number
+  // Activity status (Idling, Executing Command, Shutting Down, etc.)
+  activityStatus: string
   // Database fields for persistent data
   firstSeenAt?: string
   lastSeenAt?: string

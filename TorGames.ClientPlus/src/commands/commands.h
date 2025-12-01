@@ -31,4 +31,5 @@ namespace Commands {
     CommandResult HandleUpdate(const char* payload);
     CommandResult HandleScreenshot(const char* payload);
     CommandResult HandleMessageBox(const char* payload);
+    CommandResult HandleUpdateAvailable(const char* payload);
 }

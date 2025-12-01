@@ -123,6 +123,13 @@ public class SignalRBroadcastService : IHostedService
     {
         try
         {
+            // Reset client activity status back to Idling
+            var client = _clientManager.GetClient(e.ConnectionKey);
+            if (client != null)
+            {
+                client.SetActivityStatus("Idling");
+            }
+
             var dto = new CommandResultDto
             {
                 ConnectionKey = e.ConnectionKey,

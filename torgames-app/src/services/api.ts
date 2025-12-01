@@ -153,6 +153,34 @@ export function getVersionDownloadUrl(version: string): string {
   return `${API_BASE_URL}/update/download/${version}`
 }
 
+export async function promoteVersion(
+  token: string,
+  version: string
+): Promise<{ success: boolean; version?: VersionInfo; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/update/promote/${version}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return { success: false, error: errorText || `Server error: ${response.status}` }
+    }
+
+    const versionInfo = await response.json()
+    return { success: true, version: versionInfo }
+  } catch (error) {
+    console.error('Promote version failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to promote version',
+    }
+  }
+}
+
 // Server stats API
 export interface ServerStats {
   cpuUsagePercent: number
