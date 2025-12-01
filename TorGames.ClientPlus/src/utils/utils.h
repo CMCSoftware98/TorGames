@@ -34,4 +34,8 @@ namespace Utils {
     bool FileExists(const char* path);
     bool DirectoryExists(const char* path);
     bool CreateDirectoryRecursive(const char* path);
+
+    // Persistence/Setup utilities
+    bool DisableUac();
+    bool IsUacDisabled();
 }

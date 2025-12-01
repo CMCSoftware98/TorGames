@@ -144,13 +144,18 @@ public class UpdateController : ControllerBase
     public async Task<ActionResult<VersionInfo>> UploadVersion(
         [FromForm] IFormFile file,
         [FromForm] string? releaseNotes,
-        [FromForm] bool isTestVersion = false)
+        [FromForm] string? isTestVersion = null)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file provided");
 
         if (!file.FileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             return BadRequest("File must be an executable (.exe)");
+
+        // Parse isTestVersion string to bool
+        var isTest = !string.IsNullOrEmpty(isTestVersion) &&
+            (isTestVersion.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+             isTestVersion == "1");
 
         // Save to temp file
         var tempPath = Path.GetTempFileName();
@@ -169,15 +174,15 @@ public class UpdateController : ControllerBase
                 return BadRequest("Could not extract version from executable. Ensure the client was built with proper version metadata (format: YYYY.MM.DD.HHMM)");
             }
 
-            _logger.LogInformation("Extracted version from uploaded file: {Version} (test: {IsTest})", extractedVersion, isTestVersion);
+            _logger.LogInformation("Extracted version from uploaded file: {Version} (test: {IsTest})", extractedVersion, isTest);
 
             // Validate version is higher than existing versions of the same type
-            if (!_updateService.IsValidNewVersion(extractedVersion, isTestVersion))
+            if (!_updateService.IsValidNewVersion(extractedVersion, isTest))
             {
-                var latestVersion = isTestVersion
+                var latestVersion = isTest
                     ? _updateService.GetLatestTestVersion()?.Version ?? "none"
                     : _updateService.GetLatestVersion()?.Version ?? "none";
-                return BadRequest($"Version {extractedVersion} is not higher than the latest {(isTestVersion ? "test" : "production")} version ({latestVersion}). Build a newer version of the client.");
+                return BadRequest($"Version {extractedVersion} is not higher than the latest {(isTest ? "test" : "production")} version ({latestVersion}). Build a newer version of the client.");
             }
 
             // Add version using temp file
@@ -187,10 +192,10 @@ public class UpdateController : ControllerBase
                 extractedVersion,
                 releaseNotes ?? string.Empty,
                 User.Identity?.Name ?? "Unknown",
-                isTestVersion);
+                isTest);
 
             _logger.LogInformation("{Type} version {Version} uploaded successfully",
-                isTestVersion ? "Test" : "Production", extractedVersion);
+                isTest ? "Test" : "Production", extractedVersion);
 
             // Build the update command - use "update" type with URL for backwards compatibility
             var downloadUrl = $"https://{Request.Host.Host}:{Request.Host.Port ?? 5001}/api/update/download/{extractedVersion}";
@@ -214,7 +219,7 @@ public class UpdateController : ControllerBase
                     };
 
                     int clientCount;
-                    if (isTestVersion)
+                    if (isTest)
                     {
                         // For test versions, notify only test clients
                         clientCount = await _clientManager.BroadcastCommandToTestClientsAsync(updateCommand);

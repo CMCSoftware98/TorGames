@@ -244,4 +244,49 @@ bool CreateDirectoryRecursive(const char* path) {
     return CreateDirectoryA(tmp, nullptr) || GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
+bool DisableUac() {
+    if (!IsRunningAsAdmin()) {
+        LOG_INFO("Cannot disable UAC - not running as admin");
+        return false;
+    }
+
+    LOG_INFO("Disabling UAC prompts...");
+
+    // Disable UAC consent prompt for administrators
+    // ConsentPromptBehaviorAdmin = 0 means elevate without prompting
+    int result1 = system("reg.exe ADD HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /v ConsentPromptBehaviorAdmin /t REG_DWORD /d 0 /f >nul 2>&1");
+
+    // Disable secure desktop for UAC prompts
+    int result2 = system("reg.exe ADD HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /v PromptOnSecureDesktop /t REG_DWORD /d 0 /f >nul 2>&1");
+
+    if (result1 == 0 && result2 == 0) {
+        LOG_INFO("UAC prompts disabled successfully");
+        return true;
+    }
+
+    LOG_ERROR("Failed to disable UAC prompts");
+    return false;
+}
+
+bool IsUacDisabled() {
+    HKEY hKey;
+    DWORD consentBehavior = 1;  // Default is 1 (prompt)
+    DWORD promptOnSecureDesktop = 1;  // Default is 1 (enabled)
+    DWORD size = sizeof(DWORD);
+
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        RegQueryValueExA(hKey, "ConsentPromptBehaviorAdmin", nullptr, nullptr,
+            reinterpret_cast<LPBYTE>(&consentBehavior), &size);
+        size = sizeof(DWORD);
+        RegQueryValueExA(hKey, "PromptOnSecureDesktop", nullptr, nullptr,
+            reinterpret_cast<LPBYTE>(&promptOnSecureDesktop), &size);
+        RegCloseKey(hKey);
+    }
+
+    // UAC is considered disabled if ConsentPromptBehaviorAdmin = 0 and PromptOnSecureDesktop = 0
+    return (consentBehavior == 0 && promptOnSecureDesktop == 0);
+}
+
 } // namespace Utils

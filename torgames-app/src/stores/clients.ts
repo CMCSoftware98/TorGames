@@ -13,12 +13,44 @@ export const useClientsStore = defineStore('clients', () => {
   const isReconnecting = ref(false)
   const lastError = ref<string | null>(null)
   const commandResults = ref<CommandResultDto[]>([])
+  const lastRefreshTime = ref<Date>(new Date())
+
+  // Periodic refresh timer
+  let refreshInterval: ReturnType<typeof setInterval> | null = null
+  const REFRESH_INTERVAL_MS = 30000 // Refresh clients every 30 seconds
 
   // Computed
   const clientList = computed(() => Array.from(clients.value.values()))
   const onlineClients = computed(() => clientList.value.filter(c => c.isOnline))
   const clientCount = computed(() => clients.value.size)
   const onlineCount = computed(() => onlineClients.value.length)
+
+  // Internal functions
+  async function doRefresh() {
+    if (!isConnected.value) return
+    try {
+      const freshClients = await signalRService.getAllClients()
+      clients.value.clear()
+      freshClients.forEach(client => {
+        clients.value.set(client.connectionKey, client)
+      })
+      lastRefreshTime.value = new Date()
+    } catch (err) {
+      console.error('Failed to refresh clients:', err)
+    }
+  }
+
+  function startPeriodicRefresh() {
+    if (refreshInterval) return
+    refreshInterval = setInterval(doRefresh, REFRESH_INTERVAL_MS)
+  }
+
+  function stopPeriodicRefresh() {
+    if (refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
+    }
+  }
 
   // Actions
   async function connect(): Promise<void> {
@@ -55,8 +87,12 @@ export const useClientsStore = defineStore('clients', () => {
       initialClients.forEach(client => {
         clients.value.set(client.connectionKey, client)
       })
+      lastRefreshTime.value = new Date()
 
       isConnected.value = true
+
+      // Start periodic refresh to ensure we don't miss updates
+      startPeriodicRefresh()
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : 'Failed to connect'
       console.error('Failed to connect to SignalR:', error)
@@ -66,6 +102,7 @@ export const useClientsStore = defineStore('clients', () => {
   }
 
   async function disconnect(): Promise<void> {
+    stopPeriodicRefresh()
     await signalRService.disconnect()
     // Mark all clients as offline but keep them in the list (persistent)
     clients.value.forEach((client, key) => {
@@ -94,6 +131,8 @@ export const useClientsStore = defineStore('clients', () => {
   function handleClientHeartbeat(client: ClientDto) {
     // Update client data (always set, not just if exists)
     clients.value.set(client.connectionKey, client)
+    // Update last refresh time on heartbeat as well
+    lastRefreshTime.value = new Date()
   }
 
   function handleCommandResult(result: CommandResultDto) {
@@ -116,8 +155,12 @@ export const useClientsStore = defineStore('clients', () => {
       }).catch(err => {
         console.error('Failed to fetch clients after reconnect:', err)
       })
+      // Restart periodic refresh
+      startPeriodicRefresh()
     } else {
-      // Connection lost - mark all clients as offline but keep them in list
+      // Connection lost - stop periodic refresh
+      stopPeriodicRefresh()
+      // Mark all clients as offline but keep them in list
       clients.value.forEach((client, key) => {
         clients.value.set(key, { ...client, isOnline: false })
       })
@@ -164,6 +207,11 @@ export const useClientsStore = defineStore('clients', () => {
     }
   }
 
+  // Public refresh function
+  async function refresh(): Promise<void> {
+    await doRefresh()
+  }
+
   return {
     // State
     clients,
@@ -172,6 +220,7 @@ export const useClientsStore = defineStore('clients', () => {
     isReconnecting,
     lastError,
     commandResults,
+    lastRefreshTime,
     // Computed
     clientList,
     onlineClients,
@@ -183,6 +232,7 @@ export const useClientsStore = defineStore('clients', () => {
     executeCommand,
     getClient,
     clearCommandResults,
-    removeClient
+    removeClient,
+    refresh
   }
 })

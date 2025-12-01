@@ -46,21 +46,17 @@ const search = ref('')
 // Connection status
 const connectionError = ref<string | null>(null)
 
-// Auto-refresh state
-const lastUpdateTime = ref<Date>(new Date())
-const autoRefreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
-
 // Tick counter to force reactivity for lastUpdateText
 const updateTick = ref(0)
 let updateTickInterval: ReturnType<typeof setInterval> | null = null
 
-// Format relative time since last update
+// Format relative time since last update - uses store's lastRefreshTime
 const lastUpdateText = computed(() => {
   // Reference updateTick to ensure reactivity
   void updateTick.value
 
   const now = new Date()
-  const diff = Math.floor((now.getTime() - lastUpdateTime.value.getTime()) / 1000)
+  const diff = Math.floor((now.getTime() - clientsStore.lastRefreshTime.getTime()) / 1000)
 
   if (diff < 1) return 'Just now'
   if (diff === 1) return '1 second ago'
@@ -281,11 +277,6 @@ async function connectToServer() {
   }
 }
 
-async function refreshClients() {
-  if (!isConnected.value) {
-    await connectToServer()
-  }
-}
 
 function openClientManager() {
   if (contextMenuClient.value) {
@@ -491,20 +482,11 @@ onMounted(async () => {
   await settingsStore.initialize()
   await loadLatestVersion()
   await connectToServer()
-  lastUpdateTime.value = new Date()
 
   // Start tick interval for updating "Last Update" text every second
   updateTickInterval = setInterval(() => {
     updateTick.value++
   }, 1000)
-
-  // Start auto-refresh every 5 seconds
-  autoRefreshInterval.value = setInterval(async () => {
-    if (isConnected.value) {
-      await refreshClients()
-      lastUpdateTime.value = new Date()
-    }
-  }, 5000)
 })
 
 onUnmounted(async () => {
@@ -512,11 +494,6 @@ onUnmounted(async () => {
   if (updateTickInterval) {
     clearInterval(updateTickInterval)
     updateTickInterval = null
-  }
-  // Clear auto-refresh interval
-  if (autoRefreshInterval.value) {
-    clearInterval(autoRefreshInterval.value)
-    autoRefreshInterval.value = null
   }
   await clientsStore.disconnect()
 })
