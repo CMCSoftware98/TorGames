@@ -296,6 +296,20 @@ public class TcpInstallerService : BackgroundService
                     AvailableMemoryBytes = message.AvailMemory ?? 0
                 };
                 _clientManager.UpdateHeartbeat(connection.Client.ConnectionKey, heartbeat);
+
+                // Update IsAdmin and IsUacEnabled from heartbeat if provided
+                var heartbeatClient = _clientManager.GetClient(connection.Client.ConnectionKey);
+                if (heartbeatClient != null)
+                {
+                    if (message.IsAdmin.HasValue)
+                    {
+                        heartbeatClient.IsAdmin = message.IsAdmin.Value;
+                    }
+                    if (message.IsUacEnabled.HasValue)
+                    {
+                        heartbeatClient.IsUacEnabled = message.IsUacEnabled.Value;
+                    }
+                }
                 break;
 
             case "result":
@@ -314,11 +328,20 @@ public class TcpInstallerService : BackgroundService
                 if (client != null && result.Success && !string.IsNullOrEmpty(result.Stdout))
                 {
                     // Try to parse as detailed system info JSON
+                    _logger.LogDebug("Attempting to parse system info response (length: {Length}) for command {CommandId}",
+                        result.Stdout.Length, result.CommandId);
+
                     var detailedInfo = TryParseDetailedSystemInfo(result.Stdout);
                     if (detailedInfo != null)
                     {
-                        _logger.LogDebug("Parsed detailed system info for command {CommandId}", result.CommandId);
+                        _logger.LogInformation("Parsed detailed system info for command {CommandId}: CPU={Cpu}, GPUs={GpuCount}",
+                            result.CommandId, detailedInfo.Cpu?.Name ?? "null", detailedInfo.Gpus?.Count ?? 0);
                         client.OnDetailedSystemInfoReceived(result.CommandId, detailedInfo);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to parse system info JSON for command {CommandId}. First 500 chars: {Json}",
+                            result.CommandId, result.Stdout.Length > 500 ? result.Stdout.Substring(0, 500) : result.Stdout);
                     }
                 }
 
@@ -689,9 +712,11 @@ public class TcpInstallerService : BackgroundService
 
             // Legacy flat format
             // The C++ client sends: machineName, username, osVersion, architecture, cpuCount, totalMemory, availableMemory, localIp, isAdmin, uacEnabled, gpu, drives
-            if (!root.TryGetProperty("machineName", out _) &&
-                !root.TryGetProperty("osVersion", out _) &&
-                !root.TryGetProperty("cpuCount", out _))
+            // Check if ANY of these exist (using OR logic) - if NONE exist, it's not system info
+            bool hasLegacyFields = root.TryGetProperty("machineName", out _) ||
+                                   root.TryGetProperty("osVersion", out _) ||
+                                   root.TryGetProperty("cpuCount", out _);
+            if (!hasLegacyFields)
             {
                 return null; // Not system info
             }

@@ -237,10 +237,12 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId, cons
 }
 
 bool Protocol::SendHeartbeat(long long uptimeSeconds, long long availMemory) {
-    char json[256];
+    char json[512];
     snprintf(json, sizeof(json),
-        "{\"type\":\"heartbeat\",\"uptime\":%lld,\"availMemory\":%lld}",
-        uptimeSeconds, availMemory);
+        "{\"type\":\"heartbeat\",\"uptime\":%lld,\"availMemory\":%lld,\"isAdmin\":%s,\"isUacEnabled\":%s}",
+        uptimeSeconds, availMemory,
+        Utils::IsRunningAsAdmin() ? "true" : "false",
+        Utils::IsUacEnabled() ? "true" : "false");
 
     return SendJson(json);
 }

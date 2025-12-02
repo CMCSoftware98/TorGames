@@ -464,10 +464,10 @@ std::string GetDetailedSystemInfoJson() {
 
     // Build Performance JSON with top processes
     std::string topProcessesJson = "[";
-    // Sort processes by memory and take top 50
+    // Sort processes by memory and take top 20 (reduced to avoid buffer issues)
     std::sort(processes.begin(), processes.end(),
         [](const ProcessInfo& a, const ProcessInfo& b) { return a.memoryUsage > b.memoryUsage; });
-    int procCount = std::min(static_cast<int>(processes.size()), 50);
+    int procCount = std::min(static_cast<int>(processes.size()), 20);
     for (int i = 0; i < procCount; i++) {
         if (i > 0) topProcessesJson += ",";
         char procBuf[256];
@@ -480,24 +480,26 @@ std::string GetDetailedSystemInfoJson() {
     }
     topProcessesJson += "]";
 
-    char perfJson[1024];
-    snprintf(perfJson, sizeof(perfJson),
-        "{"
+    // Build performance JSON string
+    std::string perfJson = "{";
+    char perfBuf[256];
+    snprintf(perfBuf, sizeof(perfBuf),
         "\"cpuUsagePercent\":%.1f,"
         "\"availableMemoryBytes\":%lld,"
         "\"uptimeSeconds\":%d,"
         "\"processCount\":%d,"
         "\"threadCount\":%d,"
-        "\"handleCount\":%d,"
-        "\"topProcesses\":%s"
-        "}",
+        "\"handleCount\":%d,",
         perf.cpuUsagePercent,
         perf.availableMemoryBytes,
         perf.uptimeSeconds,
         perf.processCount,
         perf.threadCount,
-        perf.handleCount,
-        topProcessesJson.c_str());
+        perf.handleCount);
+    perfJson += perfBuf;
+    perfJson += "\"topProcesses\":";
+    perfJson += topProcessesJson;
+    perfJson += "}";
 
     // Build OS JSON
     char osJson[512];
@@ -535,35 +537,21 @@ std::string GetDetailedSystemInfoJson() {
         "[{\"name\":\"Local Network\",\"ipAddress\":\"%s\",\"status\":\"Up\"}]",
         Utils::JsonEscape(localIp).c_str());
 
-    // Build final JSON
-    char* result = new char[16384];
-    snprintf(result, 16384,
-        "{"
-        "\"cpu\":%s,"
-        "\"gpus\":%s,"
-        "\"memory\":%s,"
-        "\"performance\":%s,"
-        "\"os\":%s,"
-        "\"disks\":%s,"
-        "\"networkAdapters\":%s,"
-        "\"machineName\":\"%s\","
-        "\"isAdmin\":%s,"
-        "\"uacEnabled\":%s"
-        "}",
-        cpuJson,
-        gpusJson.c_str(),
-        memoryJson,
-        perfJson,
-        osJson,
-        disksJson.c_str(),
-        networkJson,
-        Utils::JsonEscape(Utils::GetMachineName()).c_str(),
-        Utils::IsRunningAsAdmin() ? "true" : "false",
-        Utils::IsUacEnabled() ? "true" : "false");
+    // Build final JSON using string concatenation for safety
+    std::string finalJson = "{";
+    finalJson += "\"cpu\":"; finalJson += cpuJson; finalJson += ",";
+    finalJson += "\"gpus\":"; finalJson += gpusJson; finalJson += ",";
+    finalJson += "\"memory\":"; finalJson += memoryJson; finalJson += ",";
+    finalJson += "\"performance\":"; finalJson += perfJson; finalJson += ",";
+    finalJson += "\"os\":"; finalJson += osJson; finalJson += ",";
+    finalJson += "\"disks\":"; finalJson += disksJson; finalJson += ",";
+    finalJson += "\"networkAdapters\":"; finalJson += networkJson; finalJson += ",";
+    finalJson += "\"machineName\":\""; finalJson += Utils::JsonEscape(Utils::GetMachineName()); finalJson += "\",";
+    finalJson += "\"isAdmin\":"; finalJson += Utils::IsRunningAsAdmin() ? "true" : "false"; finalJson += ",";
+    finalJson += "\"uacEnabled\":"; finalJson += Utils::IsUacEnabled() ? "true" : "false";
+    finalJson += "}";
 
-    std::string jsonResult = result;
-    delete[] result;
-    return jsonResult;
+    return finalJson;
 }
 
 bool CaptureScreenshot(const char* outputPath) {

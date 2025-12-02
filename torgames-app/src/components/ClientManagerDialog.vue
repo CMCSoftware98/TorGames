@@ -704,24 +704,26 @@ function escapeHtml(text: string): string {
   return div.innerHTML
 }
 
-watch(() => props.modelValue, async (newVal) => {
+watch(() => props.modelValue, (newVal) => {
   if (newVal && props.client) {
-    // Reset history arrays when opening
+    // Reset state when opening
+    systemInfo.value = null
+    error.value = null
     cpuHistory.value = Array(MAX_HISTORY).fill(0)
     memoryHistory.value = Array(MAX_HISTORY).fill(0)
 
-    await fetchSystemInfo()
+    fetchSystemInfo()
     startAutoRefresh()
   } else {
     stopAutoRefresh()
   }
-})
+}, { immediate: true })
 
 function startAutoRefresh() {
   stopAutoRefresh()
-  refreshInterval = setInterval(async () => {
+  refreshInterval = setInterval(() => {
     if (props.client && props.modelValue) {
-      await fetchSystemInfo(true) // silent refresh
+      fetchSystemInfo(true) // silent refresh
     }
   }, REFRESH_INTERVAL)
 }
@@ -738,7 +740,7 @@ onUnmounted(() => {
 })
 
 async function fetchSystemInfo(silent = false) {
-  if (!props.client) return
+  if (!props.client || !props.modelValue) return
 
   if (!silent) {
     loading.value = true
