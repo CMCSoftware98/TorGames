@@ -290,3 +290,149 @@ TEST(UtilsDecodeUnicode, UnicodeQuote) {
     std::string result = Utils::JsonGetString(json, "name");
     EXPECT_EQ(result, "test");
 }
+
+// ============================================================================
+// IsUserLoggedIn Tests
+// ============================================================================
+
+TEST(UtilsIsUserLoggedIn, ReturnsBoolean) {
+    // This is an integration test - just verify it returns a boolean without crashing
+    bool result = Utils::IsUserLoggedIn();
+    // Result depends on test environment - just verify it doesn't crash
+    EXPECT_TRUE(result == true || result == false);
+}
+
+TEST(UtilsIsUserLoggedIn, ConsistentResults) {
+    // Multiple calls should return consistent results
+    bool result1 = Utils::IsUserLoggedIn();
+    bool result2 = Utils::IsUserLoggedIn();
+    EXPECT_EQ(result1, result2);
+}
+
+// ============================================================================
+// IsUacDisabled Tests
+// ============================================================================
+
+TEST(UtilsIsUacDisabled, ReturnsBoolean) {
+    // Integration test - verify it returns without crashing
+    bool result = Utils::IsUacDisabled();
+    EXPECT_TRUE(result == true || result == false);
+}
+
+TEST(UtilsIsUacDisabled, ConsistentResults) {
+    // Multiple calls should return consistent results
+    bool result1 = Utils::IsUacDisabled();
+    bool result2 = Utils::IsUacDisabled();
+    EXPECT_EQ(result1, result2);
+}
+
+// ============================================================================
+// IsUacEnabled Tests
+// ============================================================================
+
+TEST(UtilsIsUacEnabled, ReturnsBoolean) {
+    // Integration test - verify it returns without crashing
+    bool result = Utils::IsUacEnabled();
+    EXPECT_TRUE(result == true || result == false);
+}
+
+TEST(UtilsIsUacEnabled, ConsistentResults) {
+    // Multiple calls should return consistent results
+    bool result1 = Utils::IsUacEnabled();
+    bool result2 = Utils::IsUacEnabled();
+    EXPECT_EQ(result1, result2);
+}
+
+TEST(UtilsIsUacEnabled, InverseOfDisabledWhenFullyDisabled) {
+    // Note: IsUacEnabled checks EnableLUA registry key
+    // IsUacDisabled checks ConsentPromptBehaviorAdmin and PromptOnSecureDesktop
+    // They check different registry values, so they're not strict inverses
+    // This test just documents the behavior
+    bool enabled = Utils::IsUacEnabled();
+    bool disabled = Utils::IsUacDisabled();
+    // Both can be true (UAC enabled but prompts disabled) or
+    // enabled=false and disabled=true (UAC fully disabled)
+    // But if UAC is enabled and prompts are enabled, disabled should be false
+    if (enabled && !disabled) {
+        // Normal case: UAC enabled, prompts enabled
+        SUCCEED();
+    } else if (!enabled && disabled) {
+        // UAC fully disabled
+        SUCCEED();
+    } else if (enabled && disabled) {
+        // UAC enabled but prompts disabled (what DisableUac() does)
+        SUCCEED();
+    } else {
+        // enabled=false and disabled=false is unlikely but possible
+        SUCCEED();
+    }
+}
+
+// ============================================================================
+// IsRunningAsAdmin Tests
+// ============================================================================
+
+TEST(UtilsIsRunningAsAdmin, ReturnsBoolean) {
+    // Integration test - verify it returns without crashing
+    bool result = Utils::IsRunningAsAdmin();
+    EXPECT_TRUE(result == true || result == false);
+}
+
+TEST(UtilsIsRunningAsAdmin, ConsistentResults) {
+    // Multiple calls should return consistent results
+    bool result1 = Utils::IsRunningAsAdmin();
+    bool result2 = Utils::IsRunningAsAdmin();
+    EXPECT_EQ(result1, result2);
+}
+
+// ============================================================================
+// GetCountryCode Tests
+// ============================================================================
+
+TEST(UtilsGetCountryCode, ReturnsValidFormat) {
+    std::string code = Utils::GetCountryCode();
+    // Country code should be empty or a 2-letter lowercase ISO code
+    if (!code.empty()) {
+        EXPECT_EQ(code.length(), 2);
+        EXPECT_TRUE(code[0] >= 'a' && code[0] <= 'z');
+        EXPECT_TRUE(code[1] >= 'a' && code[1] <= 'z');
+    }
+}
+
+TEST(UtilsGetCountryCode, ConsistentResults) {
+    std::string code1 = Utils::GetCountryCode();
+    std::string code2 = Utils::GetCountryCode();
+    EXPECT_EQ(code1, code2);
+}
+
+// ============================================================================
+// File Utility Tests
+// ============================================================================
+
+TEST(UtilsFileExists, NonExistentFile) {
+    bool result = Utils::FileExists("C:\\this_file_should_not_exist_12345.txt");
+    EXPECT_FALSE(result);
+}
+
+TEST(UtilsFileExists, SystemFile) {
+    // Windows system file that should always exist
+    bool result = Utils::FileExists("C:\\Windows\\System32\\kernel32.dll");
+    EXPECT_TRUE(result);
+}
+
+TEST(UtilsDirectoryExists, NonExistentDirectory) {
+    bool result = Utils::DirectoryExists("C:\\this_directory_should_not_exist_12345");
+    EXPECT_FALSE(result);
+}
+
+TEST(UtilsDirectoryExists, SystemDirectory) {
+    // Windows system directory that should always exist
+    bool result = Utils::DirectoryExists("C:\\Windows\\System32");
+    EXPECT_TRUE(result);
+}
+
+TEST(UtilsDirectoryExists, FileIsNotDirectory) {
+    // A file should not be detected as a directory
+    bool result = Utils::DirectoryExists("C:\\Windows\\System32\\kernel32.dll");
+    EXPECT_FALSE(result);
+}

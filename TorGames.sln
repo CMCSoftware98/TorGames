@@ -19,6 +19,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TorGames.Updater.Tests", "T
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TorGames.Installer.Tests", "TorGames.Installer.Tests\TorGames.Installer.Tests.vcxproj", "{33333333-3333-3333-3333-333333333333}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TorGames.Binder", "TorGames.Binder\TorGames.Binder.vcxproj", "{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TorGames.Binder.Stub", "TorGames.Binder.Stub\TorGames.Binder.Stub.vcxproj", "{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}"
+EndProject
 
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -90,6 +94,22 @@ Global
 		{33333333-3333-3333-3333-333333333333}.Release|Any CPU.Build.0 = Release|x64
 		{33333333-3333-3333-3333-333333333333}.Release|x64.ActiveCfg = Release|x64
 		{33333333-3333-3333-3333-333333333333}.Release|x64.Build.0 = Release|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Debug|Any CPU.Build.0 = Debug|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Debug|x64.ActiveCfg = Debug|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Debug|x64.Build.0 = Debug|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Release|Any CPU.ActiveCfg = Release|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Release|Any CPU.Build.0 = Release|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Release|x64.ActiveCfg = Release|x64
+		{F1A2B3C4-D5E6-7890-1234-567890ABCDEF}.Release|x64.Build.0 = Release|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Debug|Any CPU.Build.0 = Debug|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Debug|x64.ActiveCfg = Debug|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Debug|x64.Build.0 = Debug|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Release|Any CPU.ActiveCfg = Release|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Release|Any CPU.Build.0 = Release|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Release|x64.ActiveCfg = Release|x64
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -65,7 +65,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\vcpkg\installed\x64-windows\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>gtest.lib;gtest_main.lib;gmock.lib;ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gtest.lib;gtest_main.lib;gmock.lib;ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;wtsapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -86,7 +86,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\vcpkg\installed\x64-windows\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>gtest.lib;gtest_main.lib;gmock.lib;ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gtest.lib;gtest_main.lib;gmock.lib;ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;wtsapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

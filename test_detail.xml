@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="77" failures="0" disabled="0" errors="0" time="0.221" timestamp="2025-12-02T19:20:31.024" name="AllTests">
+  <testsuite name="UtilsToLower" tests="6" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="EmptyString" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="9" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsToLower" />
+    <testcase name="AlreadyLowercase" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="13" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsToLower" />
+    <testcase name="AllUppercase" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="17" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsToLower" />
+    <testcase name="MixedCase" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="21" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsToLower" />
+    <testcase name="WithNumbers" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="25" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsToLower" />
+    <testcase name="SpecialCharacters" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="29" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsToLower" />
+  </testsuite>
+  <testsuite name="UtilsTrim" tests="8" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="EmptyString" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="37" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+    <testcase name="WhitespaceOnly" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="41" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+    <testcase name="LeadingWhitespace" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="45" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+    <testcase name="TrailingWhitespace" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="49" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+    <testcase name="BothSides" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="53" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+    <testcase name="NoWhitespace" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="57" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+    <testcase name="InternalSpaces" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="61" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+    <testcase name="TabsAndNewlines" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="65" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsTrim" />
+  </testsuite>
+  <testsuite name="UtilsSplit" tests="6" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="EmptyString" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="73" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSplit" />
+    <testcase name="SingleElement" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="79" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSplit" />
+    <testcase name="MultipleElements" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="85" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSplit" />
+    <testcase name="EmptyParts" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="93" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSplit" />
+    <testcase name="TrailingDelimiter" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="101" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSplit" />
+    <testcase name="DifferentDelimiter" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="109" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSplit" />
+  </testsuite>
+  <testsuite name="UtilsJsonEscape" tests="8" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="EmptyString" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="121" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+    <testcase name="NoEscapeNeeded" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="125" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+    <testcase name="DoubleQuotes" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="129" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+    <testcase name="Backslashes" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="133" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+    <testcase name="Newlines" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="137" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+    <testcase name="CarriageReturn" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="141" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+    <testcase name="Tabs" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="145" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+    <testcase name="MixedEscapes" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="149" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonEscape" />
+  </testsuite>
+  <testsuite name="UtilsJsonGetString" tests="5" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="ValidKey" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="157" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetString" />
+    <testcase name="MissingKey" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="162" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetString" />
+    <testcase name="EmptyValue" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="167" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetString" />
+    <testcase name="ValueWithSpaces" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="172" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetString" />
+    <testcase name="MultipleFields" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="177" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetString" />
+  </testsuite>
+  <testsuite name="UtilsJsonGetInt" tests="5" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="ValidInt" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="186" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetInt" />
+    <testcase name="ZeroValue" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="191" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetInt" />
+    <testcase name="NegativeValue" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="196" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetInt" />
+    <testcase name="LargeValue" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="201" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetInt" />
+    <testcase name="MissingKey" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="206" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetInt" />
+  </testsuite>
+  <testsuite name="UtilsJsonGetBool" tests="4" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="TrueValue" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="215" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetBool" />
+    <testcase name="FalseValue" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="220" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetBool" />
+    <testcase name="MissingKey" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="225" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetBool" />
+    <testcase name="MultipleBools" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="230" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsJsonGetBool" />
+  </testsuite>
+  <testsuite name="UtilsSha256" tests="5" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="EmptyString" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="241" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSha256" />
+    <testcase name="HelloWorld" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="248" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSha256" />
+    <testcase name="ConsistentResults" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="255" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSha256" />
+    <testcase name="DifferentInputsDifferentHashes" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="262" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSha256" />
+    <testcase name="ValidHexFormat" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="268" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsSha256" />
+  </testsuite>
+  <testsuite name="UtilsDecodeUnicode" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.024">
+    <testcase name="NoEscapes" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="280" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsDecodeUnicode" />
+    <testcase name="UnicodeQuote" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="286" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.024" classname="UtilsDecodeUnicode" />
+  </testsuite>
+  <testsuite name="UtilsIsUserLoggedIn" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0.001" timestamp="2025-12-02T19:20:31.024">
+    <testcase name="ReturnsBoolean" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="298" status="run" result="completed" time="0.001" timestamp="2025-12-02T19:20:31.024" classname="UtilsIsUserLoggedIn" />
+    <testcase name="ConsistentResults" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="305" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.025" classname="UtilsIsUserLoggedIn" />
+  </testsuite>
+  <testsuite name="UtilsIsUacDisabled" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.026">
+    <testcase name="ReturnsBoolean" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="316" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsIsUacDisabled" />
+    <testcase name="ConsistentResults" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="322" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsIsUacDisabled" />
+  </testsuite>
+  <testsuite name="UtilsIsUacEnabled" tests="3" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.026">
+    <testcase name="ReturnsBoolean" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="333" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsIsUacEnabled" />
+    <testcase name="ConsistentResults" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="339" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsIsUacEnabled" />
+    <testcase name="InverseOfDisabledWhenFullyDisabled" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="346" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsIsUacEnabled" />
+  </testsuite>
+  <testsuite name="UtilsIsRunningAsAdmin" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.026">
+    <testcase name="ReturnsBoolean" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="375" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsIsRunningAsAdmin" />
+    <testcase name="ConsistentResults" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="381" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsIsRunningAsAdmin" />
+  </testsuite>
+  <testsuite name="UtilsGetCountryCode" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.026">
+    <testcase name="ReturnsValidFormat" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="392" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsGetCountryCode" />
+    <testcase name="ConsistentResults" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="402" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsGetCountryCode" />
+  </testsuite>
+  <testsuite name="UtilsFileExists" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.026">
+    <testcase name="NonExistentFile" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="412" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsFileExists" />
+    <testcase name="SystemFile" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="417" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsFileExists" />
+  </testsuite>
+  <testsuite name="UtilsDirectoryExists" tests="3" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.026">
+    <testcase name="NonExistentDirectory" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="423" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsDirectoryExists" />
+    <testcase name="SystemDirectory" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="428" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsDirectoryExists" />
+    <testcase name="FileIsNotDirectory" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\utils_tests.cpp" line="434" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="UtilsDirectoryExists" />
+  </testsuite>
+  <testsuite name="LoggerSingleton" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.026">
+    <testcase name="ReturnsSameInstance" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="11" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.026" classname="LoggerSingleton" />
+  </testsuite>
+  <testsuite name="LoggerTest" tests="9" failures="0" disabled="0" skipped="0" errors="0" time="0.217" timestamp="2025-12-02T19:20:31.027">
+    <testcase name="InfoLogging" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="34" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.027" classname="LoggerTest" />
+    <testcase name="DebugLogging" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="41" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.027" classname="LoggerTest" />
+    <testcase name="WarningLogging" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="48" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.027" classname="LoggerTest" />
+    <testcase name="ErrorLogging" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="55" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.028" classname="LoggerTest" />
+    <testcase name="FormattedLogging" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="62" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.028" classname="LoggerTest" />
+    <testcase name="ClearLogs" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="68" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.028" classname="LoggerTest" />
+    <testcase name="GetLogsLimitedCount" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="75" status="run" result="completed" time="0.002" timestamp="2025-12-02T19:20:31.028" classname="LoggerTest" />
+    <testcase name="MultipleMessages" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="89" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.031" classname="LoggerTest" />
+    <testcase name="ConcurrentLogging" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="148" status="run" result="completed" time="0.213" timestamp="2025-12-02T19:20:31.031" classname="LoggerTest" />
+  </testsuite>
+  <testsuite name="CriticalSectionGuardTest" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-12-02T19:20:31.244">
+    <testcase name="AcquiresAndReleasesLock" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="104" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.244" classname="CriticalSectionGuardTest" />
+    <testcase name="ReleasesOnException" file="C:\Users\Callu\RiderProjects\TorGames\TorGames.ClientPlus.Tests\src\logger_tests.cpp" line="124" status="run" result="completed" time="0." timestamp="2025-12-02T19:20:31.244" classname="CriticalSectionGuardTest" />
+  </testsuite>
+</testsuites>
