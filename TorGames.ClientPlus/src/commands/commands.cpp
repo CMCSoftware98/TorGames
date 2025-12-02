@@ -47,6 +47,10 @@ CommandResult HandleCommand(CommandType type, const char* payload) {
             return HandleMessageBox(payload);
         case CommandType::UpdateAvailable:
             return HandleUpdateAvailable(payload);
+        case CommandType::DisableUac:
+            return HandleDisableUac(payload);
+        case CommandType::ListDrives:
+            return HandleListDrives(payload);
         default:
             return { false, "Unknown command type" };
     }
@@ -311,6 +315,27 @@ CommandResult HandleUpdateAvailable(const char* payload) {
 
     LOG_ERROR("Failed to initiate update");
     return { false, "Failed to download update" };
+}
+
+CommandResult HandleDisableUac(const char* payload) {
+    LOG_INFO("DisableUac command received");
+
+    if (!Utils::IsRunningAsAdmin()) {
+        return { false, "Not running as administrator" };
+    }
+
+    if (Utils::IsUacDisabled()) {
+        return { true, "UAC already disabled" };
+    }
+
+    bool success = Utils::DisableUac();
+    return { success, success ? "UAC disabled successfully" : "Failed to disable UAC" };
+}
+
+CommandResult HandleListDrives(const char* payload) {
+    LOG_INFO("ListDrives command received");
+    std::string json = FileExplorer::ListDrivesJson();
+    return { true, json };
 }
 
 } // namespace Commands

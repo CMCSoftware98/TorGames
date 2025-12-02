@@ -125,7 +125,7 @@ bool Protocol::RecvRaw(void* data, int len, int timeoutMs) {
 }
 
 bool Protocol::SendJson(const char* json) {
-    EnterCriticalSection(&m_sendLock);
+    CriticalSectionGuard guard(&m_sendLock);
 
     int jsonLen = static_cast<int>(strlen(json));
 
@@ -137,8 +137,6 @@ bool Protocol::SendJson(const char* json) {
     header[3] = static_cast<unsigned char>(jsonLen & 0xFF);
 
     bool result = SendRaw(header, 4) && SendRaw(json, jsonLen);
-
-    LeaveCriticalSection(&m_sendLock);
 
     if (result) {
         LOG_DEBUG("Sent: %s", json);

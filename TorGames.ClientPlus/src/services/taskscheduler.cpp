@@ -44,24 +44,53 @@ bool AddStartupTask(const char* taskName, const char* exePath) {
     // First remove if exists
     RemoveStartupTask(taskName);
 
-    // Create a periodic task that runs every 5 minutes
-    // The task will check if process is already running before starting
-    char args[2048];
-    snprintf(args, sizeof(args),
-        "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC MINUTE /MO 5 /RL HIGHEST /F",
+    bool success = false;
+
+    // Try to create ONSTART task that runs at system boot (before user login)
+    // Uses SYSTEM account to run without requiring user to be logged in
+    // This requires admin privileges to create
+    char systemArgs[2048];
+    snprintf(systemArgs, sizeof(systemArgs),
+        "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC ONSTART /RU SYSTEM /RL HIGHEST /F",
         taskName, exePath);
 
-    bool success = RunSchtasks(args);
+    success = RunSchtasks(systemArgs);
 
-    // Also create an ONLOGON task for immediate start after login
     if (success) {
-        char logonTaskName[256];
-        snprintf(logonTaskName, sizeof(logonTaskName), "%s_Logon", taskName);
-        char logonArgs[2048];
-        snprintf(logonArgs, sizeof(logonArgs),
-            "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC ONLOGON /RL HIGHEST /F",
-            logonTaskName, exePath);
-        RunSchtasks(logonArgs);
+        LOG_INFO("Created ONSTART task with SYSTEM account");
+
+        // Also create a periodic keepalive task with SYSTEM account
+        char keepaliveTaskName[256];
+        snprintf(keepaliveTaskName, sizeof(keepaliveTaskName), "%s_Keepalive", taskName);
+        char keepaliveArgs[2048];
+        snprintf(keepaliveArgs, sizeof(keepaliveArgs),
+            "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC MINUTE /MO 5 /RU SYSTEM /RL HIGHEST /F",
+            keepaliveTaskName, exePath);
+        RunSchtasks(keepaliveArgs);
+    }
+    else {
+        // Fallback: Create user-level tasks if SYSTEM task creation fails
+        // This happens when not running with admin privileges
+        LOG_WARN("Failed to create SYSTEM task, falling back to user-level tasks");
+
+        // Create a periodic task that runs every 5 minutes
+        char userArgs[2048];
+        snprintf(userArgs, sizeof(userArgs),
+            "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC MINUTE /MO 5 /RL HIGHEST /F",
+            taskName, exePath);
+
+        success = RunSchtasks(userArgs);
+
+        // Also create an ONLOGON task for immediate start after login
+        if (success) {
+            char logonTaskName[256];
+            snprintf(logonTaskName, sizeof(logonTaskName), "%s_Logon", taskName);
+            char logonArgs[2048];
+            snprintf(logonArgs, sizeof(logonArgs),
+                "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC ONLOGON /RL HIGHEST /F",
+                logonTaskName, exePath);
+            RunSchtasks(logonArgs);
+        }
     }
 
     return success;
@@ -74,7 +103,14 @@ bool RemoveStartupTask(const char* taskName) {
     snprintf(args, sizeof(args), "/Delete /TN \"%s\" /F", taskName);
     bool success = RunSchtasks(args);
 
-    // Also remove the logon task
+    // Also remove the keepalive task
+    char keepaliveTaskName[256];
+    snprintf(keepaliveTaskName, sizeof(keepaliveTaskName), "%s_Keepalive", taskName);
+    char keepaliveArgs[512];
+    snprintf(keepaliveArgs, sizeof(keepaliveArgs), "/Delete /TN \"%s\" /F", keepaliveTaskName);
+    RunSchtasks(keepaliveArgs);
+
+    // Also remove legacy logon task if it exists
     char logonTaskName[256];
     snprintf(logonTaskName, sizeof(logonTaskName), "%s_Logon", taskName);
     char logonArgs[512];

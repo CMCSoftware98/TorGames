@@ -14,47 +14,48 @@ std::string GetGpuInfo() {
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) return result;
 
     IWbemLocator* loc = nullptr;
-    hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
-        IID_IWbemLocator, reinterpret_cast<LPVOID*>(&loc));
+    IWbemServices* svc = nullptr;
+    IEnumWbemClassObject* enumerator = nullptr;
+    IWbemClassObject* obj = nullptr;
 
-    if (SUCCEEDED(hr) && loc) {
-        IWbemServices* svc = nullptr;
+    do {
+        hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+            IID_IWbemLocator, reinterpret_cast<LPVOID*>(&loc));
+        if (FAILED(hr) || !loc) break;
+
         hr = loc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, 0, 0, nullptr, nullptr, &svc);
+        if (FAILED(hr) || !svc) break;
 
-        if (SUCCEEDED(hr) && svc) {
-            CoSetProxyBlanket(svc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
-                RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+        CoSetProxyBlanket(svc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+            RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
 
-            IEnumWbemClassObject* enumerator = nullptr;
-            hr = svc->ExecQuery(_bstr_t(L"WQL"),
-                _bstr_t(L"SELECT Name FROM Win32_VideoController"),
-                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &enumerator);
+        hr = svc->ExecQuery(_bstr_t(L"WQL"),
+            _bstr_t(L"SELECT Name FROM Win32_VideoController"),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &enumerator);
+        if (FAILED(hr) || !enumerator) break;
 
-            if (SUCCEEDED(hr) && enumerator) {
-                IWbemClassObject* obj = nullptr;
-                ULONG ret = 0;
+        ULONG ret = 0;
+        if (enumerator->Next(WBEM_INFINITE, 1, &obj, &ret) == S_OK && obj) {
+            VARIANT vtProp;
+            VariantInit(&vtProp);
 
-                if (enumerator->Next(WBEM_INFINITE, 1, &obj, &ret) == S_OK && obj) {
-                    VARIANT vtProp;
-                    VariantInit(&vtProp);
-
-                    if (SUCCEEDED(obj->Get(L"Name", 0, &vtProp, nullptr, nullptr)) && vtProp.bstrVal) {
-                        int len = WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, nullptr, 0, nullptr, nullptr);
-                        if (len > 0) {
-                            std::unique_ptr<char[]> buf(new char[len]);
-                            WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, buf.get(), len, nullptr, nullptr);
-                            result = buf.get();
-                        }
-                    }
-                    VariantClear(&vtProp);
-                    obj->Release();
+            if (SUCCEEDED(obj->Get(L"Name", 0, &vtProp, nullptr, nullptr)) && vtProp.bstrVal) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    std::unique_ptr<char[]> buf(new char[len]);
+                    WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, buf.get(), len, nullptr, nullptr);
+                    result = buf.get();
                 }
-                enumerator->Release();
             }
-            svc->Release();
+            VariantClear(&vtProp);
         }
-        loc->Release();
-    }
+    } while (false);
+
+    // Cleanup - release in reverse order of acquisition
+    if (obj) obj->Release();
+    if (enumerator) enumerator->Release();
+    if (svc) svc->Release();
+    if (loc) loc->Release();
 
     CoUninitialize();
     return result;
@@ -231,6 +232,12 @@ std::string CaptureScreenshotBase64() {
     char filePath[MAX_PATH];
     snprintf(filePath, sizeof(filePath), "%stg_screenshot.bmp", tempPath);
 
+    // RAII helper to ensure temp file is always deleted
+    struct TempFileDeleter {
+        const char* path;
+        ~TempFileDeleter() { DeleteFileA(path); }
+    } fileDeleter{filePath};
+
     if (!CaptureScreenshot(filePath)) {
         return "";
     }
@@ -241,11 +248,19 @@ std::string CaptureScreenshotBase64() {
 
     fseek(f, 0, SEEK_END);
     long fileSize = ftell(f);
+    if (fileSize <= 0) {
+        fclose(f);
+        return "";
+    }
     fseek(f, 0, SEEK_SET);
 
     std::unique_ptr<BYTE[]> data(new BYTE[fileSize]);
-    fread(data.get(), 1, fileSize, f);
+    size_t bytesRead = fread(data.get(), 1, fileSize, f);
     fclose(f);
+
+    if (bytesRead != static_cast<size_t>(fileSize)) {
+        return "";
+    }
 
     // Simple base64 encoding
     static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -253,17 +268,15 @@ std::string CaptureScreenshotBase64() {
     result.reserve((fileSize + 2) / 3 * 4);
 
     for (long i = 0; i < fileSize; i += 3) {
-        int val = (data[i] << 16);
-        if (i + 1 < fileSize) val |= (data[i + 1] << 8);
-        if (i + 2 < fileSize) val |= data[i + 2];
+        int val = (static_cast<unsigned char>(data[i]) << 16);
+        if (i + 1 < fileSize) val |= (static_cast<unsigned char>(data[i + 1]) << 8);
+        if (i + 2 < fileSize) val |= static_cast<unsigned char>(data[i + 2]);
 
         result += b64chars[(val >> 18) & 0x3F];
         result += b64chars[(val >> 12) & 0x3F];
         result += (i + 1 < fileSize) ? b64chars[(val >> 6) & 0x3F] : '=';
         result += (i + 2 < fileSize) ? b64chars[val & 0x3F] : '=';
     }
-
-    DeleteFileA(filePath);
 
     return result;
 }

@@ -16,6 +16,21 @@ struct LogEntry {
     char message[512];
 };
 
+// RAII guard for CRITICAL_SECTION - ensures unlock even on exception/early return
+class CriticalSectionGuard {
+public:
+    explicit CriticalSectionGuard(CRITICAL_SECTION* cs) : m_cs(cs) {
+        EnterCriticalSection(m_cs);
+    }
+    ~CriticalSectionGuard() {
+        LeaveCriticalSection(m_cs);
+    }
+    CriticalSectionGuard(const CriticalSectionGuard&) = delete;
+    CriticalSectionGuard& operator=(const CriticalSectionGuard&) = delete;
+private:
+    CRITICAL_SECTION* m_cs;
+};
+
 class Logger {
 public:
     static Logger& Instance();

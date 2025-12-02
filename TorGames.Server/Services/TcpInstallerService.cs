@@ -308,6 +308,20 @@ public class TcpInstallerService : BackgroundService
                     Stderr = "",
                     ErrorMessage = message.Error ?? ""
                 };
+
+                // Check if this is a systeminfo response by looking for pending request
+                var client = _clientManager.GetClient(connection.Client.ConnectionKey);
+                if (client != null && result.Success && !string.IsNullOrEmpty(result.Stdout))
+                {
+                    // Try to parse as detailed system info JSON
+                    var detailedInfo = TryParseDetailedSystemInfo(result.Stdout);
+                    if (detailedInfo != null)
+                    {
+                        _logger.LogDebug("Parsed detailed system info for command {CommandId}", result.CommandId);
+                        client.OnDetailedSystemInfoReceived(result.CommandId, detailedInfo);
+                    }
+                }
+
                 _clientManager.NotifyCommandResult(connection.Client.ConnectionKey, result);
                 break;
 
@@ -598,6 +612,133 @@ public class TcpInstallerService : BackgroundService
 
         _tcpClients.Clear();
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Tries to parse a JSON string as DetailedSystemInfo.
+    /// Returns null if parsing fails or JSON doesn't match expected format.
+    /// </summary>
+    private DetailedSystemInfo? TryParseDetailedSystemInfo(string json)
+    {
+        try
+        {
+            // Try to detect if this is system info JSON by checking for expected fields
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // The C++ client sends: machineName, username, osVersion, architecture, cpuCount, totalMemory, availableMemory, localIp, isAdmin, uacEnabled, gpu, drives
+            if (!root.TryGetProperty("machineName", out _) &&
+                !root.TryGetProperty("osVersion", out _) &&
+                !root.TryGetProperty("cpuCount", out _))
+            {
+                return null; // Not system info
+            }
+
+            var info = new DetailedSystemInfo();
+
+            // Parse OS info
+            info.Os = new OsInfo
+            {
+                Name = "Windows",
+                Version = GetJsonString(root, "osVersion"),
+                Architecture = GetJsonString(root, "architecture"),
+                RegisteredUser = GetJsonString(root, "username")
+            };
+
+            // Parse CPU info
+            info.Cpu = new CpuInfo
+            {
+                Cores = GetJsonInt(root, "cpuCount"),
+                LogicalProcessors = GetJsonInt(root, "cpuCount"),
+                Architecture = GetJsonString(root, "architecture")
+            };
+
+            // Parse Memory info
+            info.Memory = new MemoryInfo
+            {
+                TotalPhysicalBytes = GetJsonLong(root, "totalMemory"),
+                AvailablePhysicalBytes = GetJsonLong(root, "availableMemory"),
+                MemoryLoadPercent = info.Memory?.TotalPhysicalBytes > 0
+                    ? (int)((1 - (double)GetJsonLong(root, "availableMemory") / GetJsonLong(root, "totalMemory")) * 100)
+                    : 0
+            };
+
+            // Parse GPU info
+            var gpu = GetJsonString(root, "gpu");
+            if (!string.IsNullOrEmpty(gpu))
+            {
+                info.Gpus.Add(new GpuInfo { Name = gpu });
+            }
+
+            // Parse drives
+            if (root.TryGetProperty("drives", out var drivesElement) && drivesElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var drive in drivesElement.EnumerateArray())
+                {
+                    var driveStr = drive.GetString();
+                    if (!string.IsNullOrEmpty(driveStr))
+                    {
+                        // Format: "C: 42.5GB free / 120GB total"
+                        var driveLetter = driveStr.Length > 0 ? driveStr.Substring(0, 2) : "";
+                        info.Disks.Add(new DiskInfo
+                        {
+                            Name = driveStr,
+                            DriveLetter = driveLetter
+                        });
+                    }
+                }
+            }
+
+            // Parse performance info
+            info.Performance = new PerformanceInfo
+            {
+                AvailableMemoryBytes = GetJsonLong(root, "availableMemory")
+            };
+
+            // Parse hardware info
+            info.Hardware = new SystemHardwareInfo
+            {
+                SystemType = GetJsonString(root, "architecture")
+            };
+
+            // Network adapter (from localIp)
+            var localIp = GetJsonString(root, "localIp");
+            if (!string.IsNullOrEmpty(localIp))
+            {
+                info.NetworkAdapters.Add(new NetworkAdapterInfo
+                {
+                    IpAddress = localIp,
+                    Name = "Local Network"
+                });
+            }
+
+            _logger.LogDebug("Successfully parsed system info: OS={Os}, CPU cores={Cores}, Memory={Mem}MB",
+                info.Os?.Version, info.Cpu?.Cores, info.Memory?.TotalPhysicalBytes / 1024 / 1024);
+
+            return info;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to parse JSON as DetailedSystemInfo");
+            return null;
+        }
+    }
+
+    private static string GetJsonString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var prop) ? prop.GetString() ?? "" : "";
+    }
+
+    private static int GetJsonInt(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number
+            ? prop.GetInt32() : 0;
+    }
+
+    private static long GetJsonLong(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number
+            ? prop.GetInt64() : 0;
     }
 
     #endregion

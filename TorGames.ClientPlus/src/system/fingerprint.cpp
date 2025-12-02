@@ -16,51 +16,52 @@ static std::string QueryWmi(const wchar_t* wqlClass, const wchar_t* property) {
         RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE, nullptr);
 
     IWbemLocator* loc = nullptr;
-    hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
-        IID_IWbemLocator, reinterpret_cast<LPVOID*>(&loc));
+    IWbemServices* svc = nullptr;
+    IEnumWbemClassObject* enumerator = nullptr;
+    IWbemClassObject* obj = nullptr;
 
-    if (SUCCEEDED(hr) && loc) {
-        IWbemServices* svc = nullptr;
+    do {
+        hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+            IID_IWbemLocator, reinterpret_cast<LPVOID*>(&loc));
+        if (FAILED(hr) || !loc) break;
+
         hr = loc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, 0, 0, nullptr, nullptr, &svc);
+        if (FAILED(hr) || !svc) break;
 
-        if (SUCCEEDED(hr) && svc) {
-            hr = CoSetProxyBlanket(svc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
-                RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+        hr = CoSetProxyBlanket(svc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+            RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
 
-            IEnumWbemClassObject* enumerator = nullptr;
-            wchar_t query[256];
-            swprintf(query, 256, L"SELECT %s FROM %s", property, wqlClass);
+        wchar_t query[256];
+        swprintf(query, 256, L"SELECT %s FROM %s", property, wqlClass);
 
-            hr = svc->ExecQuery(_bstr_t(L"WQL"), _bstr_t(query),
-                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &enumerator);
+        hr = svc->ExecQuery(_bstr_t(L"WQL"), _bstr_t(query),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &enumerator);
+        if (FAILED(hr) || !enumerator) break;
 
-            if (SUCCEEDED(hr) && enumerator) {
-                IWbemClassObject* obj = nullptr;
-                ULONG ret = 0;
+        ULONG ret = 0;
+        if (enumerator->Next(WBEM_INFINITE, 1, &obj, &ret) == S_OK && obj) {
+            VARIANT vtProp;
+            VariantInit(&vtProp);
 
-                if (enumerator->Next(WBEM_INFINITE, 1, &obj, &ret) == S_OK && obj) {
-                    VARIANT vtProp;
-                    VariantInit(&vtProp);
-
-                    if (SUCCEEDED(obj->Get(property, 0, &vtProp, nullptr, nullptr))) {
-                        if (vtProp.vt == VT_BSTR && vtProp.bstrVal) {
-                            int len = WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, nullptr, 0, nullptr, nullptr);
-                            if (len > 0) {
-                                std::unique_ptr<char[]> buf(new char[len]);
-                                WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, buf.get(), len, nullptr, nullptr);
-                                result = buf.get();
-                            }
-                        }
+            if (SUCCEEDED(obj->Get(property, 0, &vtProp, nullptr, nullptr))) {
+                if (vtProp.vt == VT_BSTR && vtProp.bstrVal) {
+                    int len = WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, nullptr, 0, nullptr, nullptr);
+                    if (len > 0) {
+                        std::unique_ptr<char[]> buf(new char[len]);
+                        WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, buf.get(), len, nullptr, nullptr);
+                        result = buf.get();
                     }
-                    VariantClear(&vtProp);
-                    obj->Release();
                 }
-                enumerator->Release();
             }
-            svc->Release();
+            VariantClear(&vtProp);
         }
-        loc->Release();
-    }
+    } while (false);
+
+    // Cleanup - release in reverse order of acquisition
+    if (obj) obj->Release();
+    if (enumerator) enumerator->Release();
+    if (svc) svc->Release();
+    if (loc) loc->Release();
 
     CoUninitialize();
     return Utils::Trim(result);

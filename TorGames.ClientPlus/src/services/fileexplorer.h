@@ -14,6 +14,7 @@ namespace FileExplorer {
     // List directory contents
     std::vector<FileEntry> ListDirectory(const char* path);
     std::string ListDirectoryJson(const char* path);
+    std::string ListDrivesJson();
 
     // File operations
     bool DeleteFileOrDirectory(const char* path);

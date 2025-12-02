@@ -23,9 +23,8 @@ Logger::~Logger() {
 }
 
 void Logger::SetLogFile(const char* path) {
-    EnterCriticalSection(&m_cs);
+    CriticalSectionGuard guard(&m_cs);
     strncpy(m_logPath, path, MAX_PATH - 1);
-    LeaveCriticalSection(&m_cs);
 }
 
 void Logger::Log(LogLevel level, const char* fmt, ...) {
@@ -74,7 +73,7 @@ void Logger::Error(const char* fmt, ...) {
 }
 
 void Logger::AddEntry(LogLevel level, const char* message) {
-    EnterCriticalSection(&m_cs);
+    CriticalSectionGuard guard(&m_cs);
 
     LogEntry& entry = m_entries[m_head];
     GetLocalTime(&entry.timestamp);
@@ -100,8 +99,6 @@ void Logger::AddEntry(LogLevel level, const char* message) {
 
     m_head = (m_head + 1) % MAX_LOG_ENTRIES;
     if (m_count < MAX_LOG_ENTRIES) m_count++;
-
-    LeaveCriticalSection(&m_cs);
 }
 
 const char* Logger::LevelToString(LogLevel level) {
@@ -115,7 +112,7 @@ const char* Logger::LevelToString(LogLevel level) {
 }
 
 std::string Logger::GetLogs(int maxLines) {
-    EnterCriticalSection(&m_cs);
+    CriticalSectionGuard guard(&m_cs);
 
     std::string result;
     int linesToGet = (maxLines > m_count) ? m_count : maxLines;
@@ -132,14 +129,12 @@ std::string Logger::GetLogs(int maxLines) {
         result += line;
     }
 
-    LeaveCriticalSection(&m_cs);
     return result;
 }
 
 void Logger::Clear() {
-    EnterCriticalSection(&m_cs);
+    CriticalSectionGuard guard(&m_cs);
     m_head = 0;
     m_count = 0;
     memset(m_entries, 0, sizeof(m_entries));
-    LeaveCriticalSection(&m_cs);
 }

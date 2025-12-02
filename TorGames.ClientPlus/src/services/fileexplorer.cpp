@@ -38,31 +38,144 @@ std::vector<FileEntry> ListDirectory(const char* path) {
     return entries;
 }
 
+std::string FormatFileTime(const FILETIME& ft) {
+    SYSTEMTIME st, localSt;
+    FileTimeToSystemTime(&ft, &st);
+    SystemTimeToTzSpecificLocalTime(nullptr, &st, &localSt);
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
+        localSt.wYear, localSt.wMonth, localSt.wDay,
+        localSt.wHour, localSt.wMinute, localSt.wSecond);
+    return buf;
+}
+
+std::string GetFileExtension(const std::string& name) {
+    size_t pos = name.rfind('.');
+    if (pos != std::string::npos && pos > 0) {
+        return name.substr(pos);
+    }
+    return "";
+}
+
 std::string ListDirectoryJson(const char* path) {
     std::vector<FileEntry> entries = ListDirectory(path);
-    std::string json = "[";
 
+    std::string entriesJson = "[";
     for (size_t i = 0; i < entries.size(); i++) {
-        if (i > 0) json += ",";
+        if (i > 0) entriesJson += ",";
 
-        // Convert FILETIME to Unix timestamp
-        ULARGE_INTEGER uli;
-        uli.LowPart = entries[i].modifiedTime.dwLowDateTime;
-        uli.HighPart = entries[i].modifiedTime.dwHighDateTime;
-        long long unixTime = (uli.QuadPart - 116444736000000000LL) / 10000000LL;
+        // Get file attributes for hidden/system/readonly flags
+        char fullPathBuf[MAX_PATH];
+        snprintf(fullPathBuf, sizeof(fullPathBuf), "%s\\%s", path, entries[i].name.c_str());
+        std::string fullPath = fullPathBuf;
+        DWORD attr = GetFileAttributesA(fullPath.c_str());
 
-        char buf[512];
-        snprintf(buf, sizeof(buf),
-            "{\"name\":\"%s\",\"isDirectory\":%s,\"size\":%lld,\"modified\":%lld}",
-            Utils::JsonEscape(entries[i].name).c_str(),
-            entries[i].isDirectory ? "true" : "false",
-            entries[i].size,
-            unixTime);
-        json += buf;
+        bool isHidden = (attr != INVALID_FILE_ATTRIBUTES) && (attr & FILE_ATTRIBUTE_HIDDEN);
+        bool isSystem = (attr != INVALID_FILE_ATTRIBUTES) && (attr & FILE_ATTRIBUTE_SYSTEM);
+        bool isReadOnly = (attr != INVALID_FILE_ATTRIBUTES) && (attr & FILE_ATTRIBUTE_READONLY);
+
+        std::string extension = GetFileExtension(entries[i].name);
+        std::string modifiedTime = FormatFileTime(entries[i].modifiedTime);
+
+        // Build JSON entry using string concatenation to avoid buffer overflow
+        char sizeBuf[32];
+        snprintf(sizeBuf, sizeof(sizeBuf), "%lld", entries[i].size);
+
+        std::string entry = "{";
+        entry += "\"name\":\"" + Utils::JsonEscape(entries[i].name) + "\",";
+        entry += "\"fullPath\":\"" + Utils::JsonEscape(fullPath) + "\",";
+        entry += "\"sizeBytes\":" + std::string(sizeBuf) + ",";
+        entry += "\"type\":\"" + std::string(entries[i].isDirectory ? "directory" : "file") + "\",";
+        entry += "\"extension\":\"" + Utils::JsonEscape(extension) + "\",";
+        entry += "\"createdTime\":\"" + modifiedTime + "\",";
+        entry += "\"modifiedTime\":\"" + modifiedTime + "\",";
+        entry += "\"isDirectory\":" + std::string(entries[i].isDirectory ? "true" : "false") + ",";
+        entry += "\"isReadOnly\":" + std::string(isReadOnly ? "true" : "false") + ",";
+        entry += "\"isHidden\":" + std::string(isHidden ? "true" : "false") + ",";
+        entry += "\"isSystem\":" + std::string(isSystem ? "true" : "false");
+        entry += "}";
+
+        entriesJson += entry;
     }
+    entriesJson += "]";
 
-    json += "]";
-    return json;
+    // Return DirectoryListing format using string concatenation
+    std::string result = "{\"path\":\"" + Utils::JsonEscape(path) + "\",";
+    result += "\"entries\":" + entriesJson + ",";
+    result += "\"success\":true,\"errorMessage\":null}";
+
+    return result;
+}
+
+std::string ListDrivesJson() {
+    std::string entriesJson = "[";
+    DWORD drives = GetLogicalDrives();
+    bool first = true;
+
+    for (int i = 0; i < 26; i++) {
+        if (drives & (1 << i)) {
+            char driveLetter = 'A' + i;
+            char drivePath[4] = { driveLetter, ':', '\\', '\0' };
+
+            UINT driveType = GetDriveTypeA(drivePath);
+            if (driveType == DRIVE_UNKNOWN || driveType == DRIVE_NO_ROOT_DIR) {
+                continue;
+            }
+
+            // Get drive info
+            ULARGE_INTEGER freeBytesAvailable, totalBytes, totalFreeBytes;
+            long long totalSize = 0;
+            long long freeSpace = 0;
+
+            if (GetDiskFreeSpaceExA(drivePath, &freeBytesAvailable, &totalBytes, &totalFreeBytes)) {
+                totalSize = totalBytes.QuadPart;
+                freeSpace = totalFreeBytes.QuadPart;
+            }
+
+            // Get volume label
+            char volumeName[MAX_PATH] = "";
+            GetVolumeInformationA(drivePath, volumeName, MAX_PATH, nullptr, nullptr, nullptr, nullptr, 0);
+
+            if (!first) entriesJson += ",";
+            first = false;
+
+            char name[MAX_PATH];
+            if (volumeName[0]) {
+                snprintf(name, sizeof(name), "%s (%c:)", volumeName, driveLetter);
+            } else {
+                snprintf(name, sizeof(name), "Local Disk (%c:)", driveLetter);
+            }
+
+            char buf[512];
+            snprintf(buf, sizeof(buf),
+                "{"
+                "\"name\":\"%s\","
+                "\"fullPath\":\"%c:\\\\\","
+                "\"sizeBytes\":%lld,"
+                "\"type\":\"drive\","
+                "\"extension\":\"\","
+                "\"createdTime\":\"\","
+                "\"modifiedTime\":\"\","
+                "\"isDirectory\":true,"
+                "\"isReadOnly\":false,"
+                "\"isHidden\":false,"
+                "\"isSystem\":false"
+                "}",
+                Utils::JsonEscape(name).c_str(),
+                driveLetter,
+                totalSize);
+            entriesJson += buf;
+        }
+    }
+    entriesJson += "]";
+
+    char result[8192];
+    snprintf(result, sizeof(result),
+        "{\"path\":\"\",\"entries\":%s,\"success\":true,\"errorMessage\":null}",
+        entriesJson.c_str());
+
+    return result;
 }
 
 bool DeleteFileOrDirectory(const char* path) {
