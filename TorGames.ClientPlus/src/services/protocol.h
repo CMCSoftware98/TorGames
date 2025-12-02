@@ -66,6 +66,9 @@ public:
     // Simplified command response
     bool SendCommandResponse(const char* commandId, bool success, const char* result);
 
+    // Request update check from server
+    bool SendCheckUpdate(const char* currentVersion);
+
     // Receive message from server
     bool ReceiveMessage(ServerMessage& msg, int timeoutMs = 5000);
 

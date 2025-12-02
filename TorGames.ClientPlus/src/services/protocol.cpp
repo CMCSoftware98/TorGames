@@ -277,6 +277,15 @@ bool Protocol::SendCommandResponse(const char* commandId, bool success, const ch
     return SendCommandResult(commandId, success, success ? 0 : 1, result, success ? "" : result);
 }
 
+bool Protocol::SendCheckUpdate(const char* currentVersion) {
+    char json[256];
+    snprintf(json, sizeof(json),
+        "{\"type\":\"check_update\",\"currentVersion\":\"%s\"}",
+        currentVersion);
+
+    return SendJson(json);
+}
+
 bool Protocol::ReceiveMessage(ServerMessage& msg, int timeoutMs) {
     std::string json = ReadJson(timeoutMs);
     if (json.empty()) {

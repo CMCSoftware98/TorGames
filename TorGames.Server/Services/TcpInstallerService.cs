@@ -325,10 +325,62 @@ public class TcpInstallerService : BackgroundService
                 _clientManager.NotifyCommandResult(connection.Client.ConnectionKey, result);
                 break;
 
+            case "check_update":
+                await HandleCheckUpdateAsync(connection, message, ct);
+                break;
+
             default:
                 _logger.LogDebug("Unknown message type '{Type}' from {Key}",
                     message.Type, connection.Client.ConnectionKey);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Handles update check request from client.
+    /// </summary>
+    private async Task HandleCheckUpdateAsync(TcpClientConnection connection, TcpMessage message, CancellationToken ct)
+    {
+        try
+        {
+            var currentVersion = message.CurrentVersion ?? "";
+            var client = _clientManager.GetClient(connection.Client.ConnectionKey);
+            var isTestClient = client?.IsTestMode ?? false;
+
+            _logger.LogInformation("Client {Key} checking for update (current: {Version}, test: {IsTest})",
+                connection.Client.ConnectionKey, currentVersion, isTestClient);
+
+            var updateCheck = _updateService.CheckForUpdate(currentVersion, isTestClient);
+
+            if (updateCheck.UpdateAvailable)
+            {
+                _logger.LogInformation("Update available for {Key}: {Version}",
+                    connection.Client.ConnectionKey, updateCheck.LatestVersion);
+
+                // Send update command
+                var downloadUrl = $"{_serverBaseUrl}/api/update/download/latest";
+
+                var updateCommand = new TcpMessage
+                {
+                    Type = "command",
+                    CommandId = Guid.NewGuid().ToString(),
+                    CommandType = "update",
+                    CommandText = downloadUrl,
+                    Timeout = 300 // 5 minutes for download
+                };
+
+                await SendMessageAsync(connection.Stream, updateCommand, ct);
+            }
+            else
+            {
+                _logger.LogDebug("No update available for {Key} (current: {Version})",
+                    connection.Client.ConnectionKey, currentVersion);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to handle update check from {Key}",
+                connection.Client.ConnectionKey);
         }
     }
 
@@ -789,6 +841,9 @@ public class TcpMessage
     // Heartbeat fields
     public long? Uptime { get; set; }
     public long? AvailMemory { get; set; }
+
+    // Update check fields
+    public string? CurrentVersion { get; set; }
 
     // Command fields
     public string? CommandId { get; set; }

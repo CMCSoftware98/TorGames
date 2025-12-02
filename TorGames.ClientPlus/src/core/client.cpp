@@ -61,6 +61,12 @@ bool Client::Connect() {
     LOG_INFO("Registered as CLIENT");
     m_lastHeartbeat = GetTickCount();
 
+    // Request update check from server
+    LOG_INFO("Checking for updates...");
+    if (!m_protocol.SendCheckUpdate(CLIENT_VERSION)) {
+        LOG_WARN("Failed to send update check request");
+    }
+
     return true;
 }
 
