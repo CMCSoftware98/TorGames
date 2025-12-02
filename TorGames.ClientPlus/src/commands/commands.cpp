@@ -61,6 +61,13 @@ CommandResult HandlePing(const char* payload) {
 }
 
 CommandResult HandleGetSystemInfo(const char* payload) {
+    // Check if detailed info is requested (payload contains "detailed")
+    std::string command = Utils::JsonGetString(payload, "command");
+    if (command == "detailed" || (payload && strstr(payload, "detailed"))) {
+        LOG_INFO("Returning detailed system info");
+        std::string info = SystemInfo::GetDetailedSystemInfoJson();
+        return { true, info };
+    }
     std::string info = SystemInfo::GetSystemInfoJson();
     return { true, info };
 }

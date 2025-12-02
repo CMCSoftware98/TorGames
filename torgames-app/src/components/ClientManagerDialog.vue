@@ -54,12 +54,54 @@
           <v-window v-model="tab" class="flex-grow-1" style="overflow-y: auto; overflow-x: hidden; height: 100%;">
             <!-- Overview Tab -->
             <v-window-item value="overview" class="pa-6">
-              <v-alert v-if="responseTimeMs !== null" type="info" variant="tonal" density="compact" class="mb-6 rounded-lg border-none bg-opacity-10">
+              <v-alert v-if="responseTimeMs !== null" type="info" variant="tonal" density="compact" class="mb-4 rounded-lg border-none bg-opacity-10">
                 <template #prepend>
                   <v-icon color="info">mdi-timer-outline</v-icon>
                 </template>
-                Response Time: <strong class="text-info">{{ responseTimeMs }}ms</strong>
+                <div class="d-flex align-center">
+                  <span>Response Time: <strong class="text-info">{{ responseTimeMs }}ms</strong></span>
+                  <v-spacer />
+                  <span class="text-caption text-medium-emphasis">Auto-refreshing every 5s</span>
+                </div>
               </v-alert>
+
+              <!-- Performance Charts Row -->
+              <v-row class="mb-4">
+                <v-col cols="12" md="6">
+                  <v-card class="glass-card" variant="flat">
+                    <v-card-title class="d-flex align-center text-body-2 font-weight-medium py-3 px-4">
+                      <v-icon color="primary" size="small" class="mr-2">mdi-chart-line</v-icon>
+                      CPU Usage
+                      <v-spacer />
+                      <span class="text-h6 font-weight-bold" :class="getUsageColorText(systemInfo.performance?.cpuUsagePercent || 0)">
+                        {{ (systemInfo.performance?.cpuUsagePercent ?? 0).toFixed(1) }}%
+                      </span>
+                    </v-card-title>
+                    <v-card-text class="pa-4 pt-0">
+                      <div class="chart-container">
+                        <canvas ref="cpuChart" />
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-card class="glass-card" variant="flat">
+                    <v-card-title class="d-flex align-center text-body-2 font-weight-medium py-3 px-4">
+                      <v-icon color="secondary" size="small" class="mr-2">mdi-chart-line</v-icon>
+                      Memory Usage
+                      <v-spacer />
+                      <span class="text-h6 font-weight-bold" :class="getUsageColorText(systemInfo.memory?.memoryLoadPercent || 0)">
+                        {{ systemInfo.memory?.memoryLoadPercent ?? 0 }}%
+                      </span>
+                    </v-card-title>
+                    <v-card-text class="pa-4 pt-0">
+                      <div class="chart-container">
+                        <canvas ref="memoryChart" />
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                </v-col>
+              </v-row>
 
               <v-row>
                 <v-col cols="12" md="6">
@@ -90,51 +132,30 @@
                     <div class="text-subtitle-2 text-medium-emphasis mb-4 d-flex align-center">
                       <v-icon size="small" class="mr-2">mdi-speedometer</v-icon> PERFORMANCE
                     </div>
-                    
-                    <div class="mb-4">
-                      <div class="d-flex justify-space-between mb-1 text-caption">
-                        <span>CPU Usage</span>
-                        <span :class="getUsageColorText(systemInfo.performance?.cpuUsagePercent || 0)">
-                          {{ systemInfo.performance?.cpuUsagePercent?.toFixed(1) }}%
-                        </span>
-                      </div>
-                      <v-progress-linear
-                        :model-value="systemInfo.performance?.cpuUsagePercent || 0"
-                        :color="getUsageColor(systemInfo.performance?.cpuUsagePercent || 0)"
-                        height="6"
-                        rounded
-                        bg-color="rgba(255,255,255,0.1)"
-                      />
-                    </div>
 
-                    <div class="mb-4">
-                      <div class="d-flex justify-space-between mb-1 text-caption">
-                        <span>Memory Usage</span>
-                        <span :class="getUsageColorText(systemInfo.memory?.memoryLoadPercent || 0)">
-                          {{ systemInfo.memory?.memoryLoadPercent }}%
-                        </span>
-                      </div>
-                      <v-progress-linear
-                        :model-value="systemInfo.memory?.memoryLoadPercent || 0"
-                        :color="getUsageColor(systemInfo.memory?.memoryLoadPercent || 0)"
-                        height="6"
-                        rounded
-                        bg-color="rgba(255,255,255,0.1)"
-                      />
-                    </div>
-
-                    <div class="d-flex justify-space-between mt-4">
-                      <div class="text-center">
+                    <div class="d-flex justify-space-between mb-4">
+                      <div class="text-center flex-grow-1">
                         <div class="text-h6 font-weight-bold">{{ systemInfo.performance?.processCount || '-' }}</div>
                         <div class="text-caption text-medium-emphasis">Processes</div>
                       </div>
-                      <div class="text-center">
+                      <div class="text-center flex-grow-1">
                         <div class="text-h6 font-weight-bold">{{ systemInfo.performance?.threadCount || '-' }}</div>
                         <div class="text-caption text-medium-emphasis">Threads</div>
                       </div>
-                      <div class="text-center">
+                      <div class="text-center flex-grow-1">
                         <div class="text-h6 font-weight-bold">{{ formatUptime(systemInfo.performance?.uptimeSeconds || 0) }}</div>
                         <div class="text-caption text-medium-emphasis">Uptime</div>
+                      </div>
+                    </div>
+
+                    <!-- GPU Quick Info -->
+                    <div v-if="systemInfo.gpus && systemInfo.gpus.length > 0" class="mt-4 pt-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                      <div class="text-caption text-medium-emphasis mb-2">GPU</div>
+                      <div class="text-body-2 font-weight-medium">{{ systemInfo.gpus[0]?.name || 'Unknown' }}</div>
+                      <div class="text-caption text-medium-emphasis">
+                        {{ formatBytes(systemInfo.gpus[0]?.videoMemoryBytes || 0) }} VRAM
+                        <span v-if="systemInfo.gpus[0]?.resolution"> • {{ systemInfo.gpus[0].resolution }}</span>
+                        <span v-if="systemInfo.gpus[0]?.currentRefreshRate"> @ {{ systemInfo.gpus[0].currentRefreshRate }}Hz</span>
                       </div>
                     </div>
                   </v-card>
@@ -350,22 +371,35 @@
 
             <!-- GPU Tab -->
             <v-window-item value="gpu" class="pa-6">
-              <div v-if="systemInfo.gpus.length === 0" class="text-center py-8 text-medium-emphasis">
+              <div v-if="!systemInfo.gpus || systemInfo.gpus.length === 0" class="text-center py-8 text-medium-emphasis">
                 <v-icon size="48" class="mb-2">mdi-expansion-card-variant</v-icon>
                 <div>No GPU information available</div>
               </div>
-              
+
               <div v-else class="d-flex flex-column gap-4">
                 <v-card v-for="(gpu, index) in systemInfo.gpus" :key="index" class="glass-card pa-4" variant="flat">
                   <div class="d-flex align-center mb-4">
                     <v-avatar color="purple" variant="tonal" class="mr-3">
                       <v-icon color="purple">mdi-expansion-card</v-icon>
                     </v-avatar>
-                    <div class="text-h6">{{ gpu.name }}</div>
+                    <div>
+                      <div class="text-h6">{{ gpu.name || 'Unknown GPU' }}</div>
+                      <div class="text-caption text-medium-emphasis">{{ gpu.manufacturer || 'Unknown Manufacturer' }}</div>
+                    </div>
                   </div>
-                  
-                  <div class="info-row"><span>Manufacturer</span><span>{{ gpu.manufacturer || '-' }}</span></div>
-                  <div class="info-row"><span>Video Memory</span><span>{{ formatBytes(gpu.videoMemoryBytes) }}</span></div>
+
+                  <!-- VRAM Usage Display -->
+                  <v-card class="glass-card mb-4 pa-4" variant="flat" style="background: rgba(156, 39, 176, 0.1);">
+                    <div class="d-flex align-center justify-space-between">
+                      <div>
+                        <div class="text-caption text-medium-emphasis">VIDEO MEMORY</div>
+                        <div class="text-h5 font-weight-bold text-purple">{{ formatBytes(gpu.videoMemoryBytes || 0) }}</div>
+                      </div>
+                      <v-icon color="purple" size="40">mdi-memory</v-icon>
+                    </div>
+                  </v-card>
+
+                  <div class="info-row"><span>Video Processor</span><span>{{ gpu.videoProcessor || gpu.name || '-' }}</span></div>
                   <div class="info-row"><span>Resolution</span><span>{{ gpu.resolution || '-' }}</span></div>
                   <div class="info-row"><span>Refresh Rate</span><span>{{ gpu.currentRefreshRate ? `${gpu.currentRefreshRate} Hz` : '-' }}</span></div>
                   <div class="info-row"><span>Driver Version</span><span>{{ gpu.driverVersion || '-' }}</span></div>
@@ -554,7 +588,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive } from 'vue'
+import { ref, computed, watch, reactive, onUnmounted, nextTick } from 'vue'
 import { signalRService } from '@/services/signalr'
 import type { ClientDto, DetailedSystemInfoDto, DiskInfoDto, ProcessInfoDto } from '@/types/client'
 
@@ -605,6 +639,15 @@ const clientLogs = ref<string | null>(null)
 const logLineCount = ref(200)
 const logSearch = ref('')
 const logsContainer = ref<HTMLElement | null>(null)
+
+// Auto-refresh and charts
+const REFRESH_INTERVAL = 5000 // 5 seconds
+const MAX_HISTORY = 60
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+const cpuChart = ref<HTMLCanvasElement | null>(null)
+const memoryChart = ref<HTMLCanvasElement | null>(null)
+const cpuHistory = ref<number[]>(Array(MAX_HISTORY).fill(0))
+const memoryHistory = ref<number[]>(Array(MAX_HISTORY).fill(0))
 
 const filteredProcesses = computed(() => {
   const processes = systemInfo.value?.performance?.topProcesses || []
@@ -663,29 +706,77 @@ function escapeHtml(text: string): string {
 
 watch(() => props.modelValue, async (newVal) => {
   if (newVal && props.client) {
+    // Reset history arrays when opening
+    cpuHistory.value = Array(MAX_HISTORY).fill(0)
+    memoryHistory.value = Array(MAX_HISTORY).fill(0)
+
     await fetchSystemInfo()
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
   }
 })
 
-async function fetchSystemInfo() {
+function startAutoRefresh() {
+  stopAutoRefresh()
+  refreshInterval = setInterval(async () => {
+    if (props.client && props.modelValue) {
+      await fetchSystemInfo(true) // silent refresh
+    }
+  }, REFRESH_INTERVAL)
+}
+
+function stopAutoRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+    refreshInterval = null
+  }
+}
+
+onUnmounted(() => {
+  stopAutoRefresh()
+})
+
+async function fetchSystemInfo(silent = false) {
   if (!props.client) return
 
-  loading.value = true
-  error.value = null
-  responseTimeMs.value = null
+  if (!silent) {
+    loading.value = true
+    error.value = null
+    responseTimeMs.value = null
+  }
 
   try {
     const result = await signalRService.requestSystemInfo(props.client.connectionKey)
     if (result.data) {
       systemInfo.value = result.data
-      responseTimeMs.value = result.responseTimeMs
-    } else {
+      if (!silent) {
+        responseTimeMs.value = result.responseTimeMs
+      }
+
+      // Update chart history
+      const cpuPercent = result.data.performance?.cpuUsagePercent ?? 0
+      const memPercent = result.data.memory?.memoryLoadPercent ?? 0
+
+      cpuHistory.value.push(cpuPercent)
+      if (cpuHistory.value.length > MAX_HISTORY) cpuHistory.value.shift()
+
+      memoryHistory.value.push(memPercent)
+      if (memoryHistory.value.length > MAX_HISTORY) memoryHistory.value.shift()
+
+      // Update charts
+      nextTick(() => updateCharts())
+    } else if (!silent) {
       error.value = 'Failed to retrieve system information. The client may be offline.'
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'An error occurred'
+    if (!silent) {
+      error.value = e instanceof Error ? e.message : 'An error occurred'
+    }
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
 }
 
@@ -867,6 +958,136 @@ async function sendPowerCommand(commandType: string, actionName: string) {
   }
 }
 
+// Chart drawing functions
+function drawLineChart(
+  canvas: HTMLCanvasElement,
+  data: number[],
+  color: string,
+  maxValue: number = 100,
+  label: string = '%',
+  fillColor?: string
+) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  ctx.scale(dpr, dpr)
+
+  const width = rect.width
+  const height = rect.height
+  const padding = { top: 20, right: 40, bottom: 25, left: 10 }
+  const chartWidth = width - padding.left - padding.right
+  const chartHeight = height - padding.top - padding.bottom
+
+  // Clear
+  ctx.clearRect(0, 0, width, height)
+
+  // Draw grid lines
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
+  ctx.lineWidth = 1
+
+  // Horizontal grid lines
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartHeight / 4) * i
+    ctx.beginPath()
+    ctx.moveTo(padding.left, y)
+    ctx.lineTo(width - padding.right, y)
+    ctx.stroke()
+
+    // Y-axis labels
+    const value = maxValue - (maxValue / 4) * i
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+    ctx.font = '10px sans-serif'
+    ctx.textAlign = 'right'
+    ctx.fillText(`${value.toFixed(0)}${label}`, width - 5, y + 3)
+  }
+
+  // Draw data line
+  if (data.length > 1) {
+    const stepX = chartWidth / (MAX_HISTORY - 1)
+
+    // Fill area under curve
+    if (fillColor) {
+      ctx.beginPath()
+      ctx.moveTo(padding.left, padding.top + chartHeight)
+
+      data.forEach((value, index) => {
+        const x = padding.left + index * stepX
+        const y = padding.top + chartHeight - (value / maxValue) * chartHeight
+        ctx.lineTo(x, y)
+      })
+
+      ctx.lineTo(padding.left + (data.length - 1) * stepX, padding.top + chartHeight)
+      ctx.closePath()
+
+      const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight)
+      gradient.addColorStop(0, fillColor)
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      ctx.fillStyle = gradient
+      ctx.fill()
+    }
+
+    // Draw line
+    ctx.beginPath()
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+
+    data.forEach((value, index) => {
+      const x = padding.left + index * stepX
+      const y = padding.top + chartHeight - (value / maxValue) * chartHeight
+
+      if (index === 0) {
+        ctx.moveTo(x, y)
+      } else {
+        ctx.lineTo(x, y)
+      }
+    })
+
+    ctx.stroke()
+
+    // Draw current value dot
+    if (data.length > 0) {
+      const lastValue = data[data.length - 1] ?? 0
+      const lastX = padding.left + (data.length - 1) * stepX
+      const lastY = padding.top + chartHeight - (lastValue / maxValue) * chartHeight
+
+      ctx.beginPath()
+      ctx.arc(lastX, lastY, 4, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.arc(lastX, lastY, 6, 0, Math.PI * 2)
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+  }
+
+  // Time labels
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.font = '10px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('-5m', padding.left, height - 5)
+  ctx.fillText('-2.5m', padding.left + chartWidth / 2, height - 5)
+  ctx.fillText('now', width - padding.right, height - 5)
+}
+
+function updateCharts() {
+  if (cpuChart.value) {
+    drawLineChart(cpuChart.value, cpuHistory.value, '#6366f1', 100, '%', 'rgba(99, 102, 241, 0.2)')
+  }
+  if (memoryChart.value) {
+    drawLineChart(memoryChart.value, memoryHistory.value, '#ec4899', 100, '%', 'rgba(236, 72, 153, 0.2)')
+  }
+}
+
 // Process context menu functions
 function showProcessContextMenu(event: MouseEvent, process: ProcessInfoDto) {
   selectedProcess.value = process
@@ -986,6 +1207,16 @@ async function killProcess() {
 </script>
 
 <style scoped>
+.chart-container {
+  height: 120px;
+  position: relative;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .info-row {
   display: flex;
   justify-content: space-between;

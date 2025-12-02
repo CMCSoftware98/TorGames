@@ -4,8 +4,67 @@
 #include "fingerprint.h"
 #include "logger.h"
 #include <memory>
+#include <algorithm>
+#include <pdh.h>
+#include <pdhmsg.h>
+#include <psapi.h>
+
+#pragma comment(lib, "pdh.lib")
 
 namespace SystemInfo {
+
+// Helper to convert BSTR to std::string
+static std::string BstrToString(BSTR bstr) {
+    if (!bstr) return "";
+    int len = WideCharToMultiByte(CP_UTF8, 0, bstr, -1, nullptr, 0, nullptr, nullptr);
+    if (len <= 0) return "";
+    std::unique_ptr<char[]> buf(new char[len]);
+    WideCharToMultiByte(CP_UTF8, 0, bstr, -1, buf.get(), len, nullptr, nullptr);
+    return buf.get();
+}
+
+// Helper to get WMI string property
+static std::string GetWmiString(IWbemClassObject* obj, const wchar_t* prop) {
+    VARIANT vtProp;
+    VariantInit(&vtProp);
+    std::string result;
+    if (SUCCEEDED(obj->Get(prop, 0, &vtProp, nullptr, nullptr)) && vtProp.bstrVal) {
+        result = BstrToString(vtProp.bstrVal);
+    }
+    VariantClear(&vtProp);
+    return result;
+}
+
+// Helper to get WMI int property
+static int GetWmiInt(IWbemClassObject* obj, const wchar_t* prop) {
+    VARIANT vtProp;
+    VariantInit(&vtProp);
+    int result = 0;
+    if (SUCCEEDED(obj->Get(prop, 0, &vtProp, nullptr, nullptr))) {
+        if (vtProp.vt == VT_I4) result = vtProp.intVal;
+        else if (vtProp.vt == VT_UI4) result = static_cast<int>(vtProp.uintVal);
+    }
+    VariantClear(&vtProp);
+    return result;
+}
+
+// Helper to get WMI unsigned long long property
+static unsigned long long GetWmiULongLong(IWbemClassObject* obj, const wchar_t* prop) {
+    VARIANT vtProp;
+    VariantInit(&vtProp);
+    unsigned long long result = 0;
+    if (SUCCEEDED(obj->Get(prop, 0, &vtProp, nullptr, nullptr))) {
+        if (vtProp.vt == VT_BSTR && vtProp.bstrVal) {
+            result = _wtoi64(vtProp.bstrVal);
+        } else if (vtProp.vt == VT_UI4) {
+            result = vtProp.uintVal;
+        } else if (vtProp.vt == VT_I4) {
+            result = static_cast<unsigned long long>(vtProp.intVal);
+        }
+    }
+    VariantClear(&vtProp);
+    return result;
+}
 
 std::string GetGpuInfo() {
     std::string result = "Unknown";
@@ -36,22 +95,11 @@ std::string GetGpuInfo() {
 
         ULONG ret = 0;
         if (enumerator->Next(WBEM_INFINITE, 1, &obj, &ret) == S_OK && obj) {
-            VARIANT vtProp;
-            VariantInit(&vtProp);
-
-            if (SUCCEEDED(obj->Get(L"Name", 0, &vtProp, nullptr, nullptr)) && vtProp.bstrVal) {
-                int len = WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, nullptr, 0, nullptr, nullptr);
-                if (len > 0) {
-                    std::unique_ptr<char[]> buf(new char[len]);
-                    WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, buf.get(), len, nullptr, nullptr);
-                    result = buf.get();
-                }
-            }
-            VariantClear(&vtProp);
+            result = GetWmiString(obj, L"Name");
+            if (result.empty()) result = "Unknown";
         }
     } while (false);
 
-    // Cleanup - release in reverse order of acquisition
     if (obj) obj->Release();
     if (enumerator) enumerator->Release();
     if (svc) svc->Release();
@@ -59,6 +107,169 @@ std::string GetGpuInfo() {
 
     CoUninitialize();
     return result;
+}
+
+CpuInfo GetCpuDetails() {
+    CpuInfo info = {};
+    info.name = "Unknown";
+    info.manufacturer = "Unknown";
+    info.architecture = Utils::GetArchitecture();
+    info.cores = Utils::GetCpuCount();
+    info.logicalProcessors = Utils::GetCpuCount();
+
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) return info;
+
+    IWbemLocator* loc = nullptr;
+    IWbemServices* svc = nullptr;
+    IEnumWbemClassObject* enumerator = nullptr;
+    IWbemClassObject* obj = nullptr;
+
+    do {
+        hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+            IID_IWbemLocator, reinterpret_cast<LPVOID*>(&loc));
+        if (FAILED(hr) || !loc) break;
+
+        hr = loc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, 0, 0, nullptr, nullptr, &svc);
+        if (FAILED(hr) || !svc) break;
+
+        CoSetProxyBlanket(svc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+            RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+
+        hr = svc->ExecQuery(_bstr_t(L"WQL"),
+            _bstr_t(L"SELECT Name, Manufacturer, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed, CurrentClockSpeed, L2CacheSize, L3CacheSize FROM Win32_Processor"),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &enumerator);
+        if (FAILED(hr) || !enumerator) break;
+
+        ULONG ret = 0;
+        if (enumerator->Next(WBEM_INFINITE, 1, &obj, &ret) == S_OK && obj) {
+            std::string name = GetWmiString(obj, L"Name");
+            if (!name.empty()) info.name = name;
+
+            std::string mfr = GetWmiString(obj, L"Manufacturer");
+            if (!mfr.empty()) info.manufacturer = mfr;
+
+            int cores = GetWmiInt(obj, L"NumberOfCores");
+            if (cores > 0) info.cores = cores;
+
+            int logical = GetWmiInt(obj, L"NumberOfLogicalProcessors");
+            if (logical > 0) info.logicalProcessors = logical;
+
+            info.maxClockSpeedMhz = GetWmiInt(obj, L"MaxClockSpeed");
+            info.currentClockSpeedMhz = GetWmiInt(obj, L"CurrentClockSpeed");
+            info.l2CacheKb = GetWmiInt(obj, L"L2CacheSize");
+            info.l3CacheKb = GetWmiInt(obj, L"L3CacheSize");
+        }
+    } while (false);
+
+    if (obj) obj->Release();
+    if (enumerator) enumerator->Release();
+    if (svc) svc->Release();
+    if (loc) loc->Release();
+
+    CoUninitialize();
+    return info;
+}
+
+std::vector<GpuDetailedInfo> GetGpuDetails() {
+    std::vector<GpuDetailedInfo> gpus;
+
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) return gpus;
+
+    IWbemLocator* loc = nullptr;
+    IWbemServices* svc = nullptr;
+    IEnumWbemClassObject* enumerator = nullptr;
+
+    do {
+        hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+            IID_IWbemLocator, reinterpret_cast<LPVOID*>(&loc));
+        if (FAILED(hr) || !loc) break;
+
+        hr = loc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, 0, 0, nullptr, nullptr, &svc);
+        if (FAILED(hr) || !svc) break;
+
+        CoSetProxyBlanket(svc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+            RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+
+        hr = svc->ExecQuery(_bstr_t(L"WQL"),
+            _bstr_t(L"SELECT Name, AdapterCompatibility, AdapterRAM, DriverVersion, CurrentRefreshRate, VideoProcessor, CurrentHorizontalResolution, CurrentVerticalResolution FROM Win32_VideoController"),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &enumerator);
+        if (FAILED(hr) || !enumerator) break;
+
+        IWbemClassObject* obj = nullptr;
+        ULONG ret = 0;
+        while (enumerator->Next(WBEM_INFINITE, 1, &obj, &ret) == S_OK && obj) {
+            GpuDetailedInfo gpu = {};
+            gpu.name = GetWmiString(obj, L"Name");
+            gpu.manufacturer = GetWmiString(obj, L"AdapterCompatibility");
+            gpu.videoMemoryBytes = GetWmiULongLong(obj, L"AdapterRAM");
+            gpu.driverVersion = GetWmiString(obj, L"DriverVersion");
+            gpu.currentRefreshRate = GetWmiInt(obj, L"CurrentRefreshRate");
+            gpu.videoProcessor = GetWmiString(obj, L"VideoProcessor");
+
+            int hRes = GetWmiInt(obj, L"CurrentHorizontalResolution");
+            int vRes = GetWmiInt(obj, L"CurrentVerticalResolution");
+            if (hRes > 0 && vRes > 0) {
+                char resBuf[64];
+                snprintf(resBuf, sizeof(resBuf), "%dx%d", hRes, vRes);
+                gpu.resolution = resBuf;
+            }
+
+            if (!gpu.name.empty()) {
+                gpus.push_back(gpu);
+            }
+            obj->Release();
+        }
+    } while (false);
+
+    if (enumerator) enumerator->Release();
+    if (svc) svc->Release();
+    if (loc) loc->Release();
+
+    CoUninitialize();
+    return gpus;
+}
+
+double GetCpuUsagePercent() {
+    static PDH_HQUERY cpuQuery = nullptr;
+    static PDH_HCOUNTER cpuTotal = nullptr;
+    static bool initialized = false;
+
+    if (!initialized) {
+        PdhOpenQuery(nullptr, 0, &cpuQuery);
+        PdhAddEnglishCounterW(cpuQuery, L"\\Processor(_Total)\\% Processor Time", 0, &cpuTotal);
+        PdhCollectQueryData(cpuQuery);
+        initialized = true;
+        Sleep(100); // Need a small delay for first sample
+    }
+
+    PDH_FMT_COUNTERVALUE counterVal;
+    PdhCollectQueryData(cpuQuery);
+    if (PdhGetFormattedCounterValue(cpuTotal, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
+        return counterVal.doubleValue;
+    }
+    return 0.0;
+}
+
+PerformanceInfo GetPerformanceInfo() {
+    PerformanceInfo info = {};
+
+    info.cpuUsagePercent = GetCpuUsagePercent();
+    info.availableMemoryBytes = Utils::GetAvailableMemory();
+
+    // Get uptime
+    info.uptimeSeconds = static_cast<int>(GetTickCount64() / 1000);
+
+    // Get process/thread/handle counts
+    PERFORMANCE_INFORMATION perfInfo = { sizeof(PERFORMANCE_INFORMATION) };
+    if (GetPerformanceInfo(&perfInfo, sizeof(perfInfo))) {
+        info.processCount = static_cast<int>(perfInfo.ProcessCount);
+        info.threadCount = static_cast<int>(perfInfo.ThreadCount);
+        info.handleCount = static_cast<int>(perfInfo.HandleCount);
+    }
+
+    return info;
 }
 
 std::vector<std::string> GetDriveInfo() {
@@ -175,6 +386,184 @@ std::string GetSystemInfoJson() {
         drivesJson.c_str());
 
     return buf;
+}
+
+std::string GetDetailedSystemInfoJson() {
+    // Get all detailed info
+    CpuInfo cpu = GetCpuDetails();
+    std::vector<GpuDetailedInfo> gpus = GetGpuDetails();
+    PerformanceInfo perf = GetPerformanceInfo();
+    std::vector<ProcessInfo> processes = GetProcessList();
+    std::vector<std::string> drives = GetDriveInfo();
+
+    // Build CPU JSON
+    char cpuJson[1024];
+    snprintf(cpuJson, sizeof(cpuJson),
+        "{"
+        "\"name\":\"%s\","
+        "\"manufacturer\":\"%s\","
+        "\"cores\":%d,"
+        "\"logicalProcessors\":%d,"
+        "\"maxClockSpeedMhz\":%d,"
+        "\"currentClockSpeedMhz\":%d,"
+        "\"architecture\":\"%s\","
+        "\"l2CacheKb\":%d,"
+        "\"l3CacheKb\":%d"
+        "}",
+        Utils::JsonEscape(cpu.name).c_str(),
+        Utils::JsonEscape(cpu.manufacturer).c_str(),
+        cpu.cores,
+        cpu.logicalProcessors,
+        cpu.maxClockSpeedMhz,
+        cpu.currentClockSpeedMhz,
+        Utils::JsonEscape(cpu.architecture).c_str(),
+        cpu.l2CacheKb,
+        cpu.l3CacheKb);
+
+    // Build GPUs JSON array
+    std::string gpusJson = "[";
+    for (size_t i = 0; i < gpus.size(); i++) {
+        if (i > 0) gpusJson += ",";
+        char gpuBuf[1024];
+        snprintf(gpuBuf, sizeof(gpuBuf),
+            "{"
+            "\"name\":\"%s\","
+            "\"manufacturer\":\"%s\","
+            "\"videoMemoryBytes\":%llu,"
+            "\"driverVersion\":\"%s\","
+            "\"currentRefreshRate\":%d,"
+            "\"videoProcessor\":\"%s\","
+            "\"resolution\":\"%s\""
+            "}",
+            Utils::JsonEscape(gpus[i].name).c_str(),
+            Utils::JsonEscape(gpus[i].manufacturer).c_str(),
+            gpus[i].videoMemoryBytes,
+            Utils::JsonEscape(gpus[i].driverVersion).c_str(),
+            gpus[i].currentRefreshRate,
+            Utils::JsonEscape(gpus[i].videoProcessor).c_str(),
+            Utils::JsonEscape(gpus[i].resolution).c_str());
+        gpusJson += gpuBuf;
+    }
+    gpusJson += "]";
+
+    // Build Memory JSON
+    long long totalMem = Utils::GetTotalMemory();
+    long long availMem = Utils::GetAvailableMemory();
+    int memLoadPercent = totalMem > 0 ? static_cast<int>((1.0 - static_cast<double>(availMem) / totalMem) * 100) : 0;
+
+    char memoryJson[512];
+    snprintf(memoryJson, sizeof(memoryJson),
+        "{"
+        "\"totalPhysicalBytes\":%lld,"
+        "\"availablePhysicalBytes\":%lld,"
+        "\"memoryLoadPercent\":%d"
+        "}",
+        totalMem,
+        availMem,
+        memLoadPercent);
+
+    // Build Performance JSON with top processes
+    std::string topProcessesJson = "[";
+    // Sort processes by memory and take top 50
+    std::sort(processes.begin(), processes.end(),
+        [](const ProcessInfo& a, const ProcessInfo& b) { return a.memoryUsage > b.memoryUsage; });
+    int procCount = std::min(static_cast<int>(processes.size()), 50);
+    for (int i = 0; i < procCount; i++) {
+        if (i > 0) topProcessesJson += ",";
+        char procBuf[256];
+        snprintf(procBuf, sizeof(procBuf),
+            "{\"pid\":%lu,\"name\":\"%s\",\"cpuPercent\":0,\"memoryBytes\":%llu}",
+            processes[i].pid,
+            Utils::JsonEscape(processes[i].name).c_str(),
+            static_cast<unsigned long long>(processes[i].memoryUsage));
+        topProcessesJson += procBuf;
+    }
+    topProcessesJson += "]";
+
+    char perfJson[1024];
+    snprintf(perfJson, sizeof(perfJson),
+        "{"
+        "\"cpuUsagePercent\":%.1f,"
+        "\"availableMemoryBytes\":%lld,"
+        "\"uptimeSeconds\":%d,"
+        "\"processCount\":%d,"
+        "\"threadCount\":%d,"
+        "\"handleCount\":%d,"
+        "\"topProcesses\":%s"
+        "}",
+        perf.cpuUsagePercent,
+        perf.availableMemoryBytes,
+        perf.uptimeSeconds,
+        perf.processCount,
+        perf.threadCount,
+        perf.handleCount,
+        topProcessesJson.c_str());
+
+    // Build OS JSON
+    char osJson[512];
+    snprintf(osJson, sizeof(osJson),
+        "{"
+        "\"name\":\"Windows\","
+        "\"version\":\"%s\","
+        "\"architecture\":\"%s\","
+        "\"registeredUser\":\"%s\""
+        "}",
+        Utils::JsonEscape(Utils::GetOsVersion()).c_str(),
+        Utils::JsonEscape(Utils::GetArchitecture()).c_str(),
+        Utils::JsonEscape(Utils::GetUsername()).c_str());
+
+    // Build Drives JSON array
+    std::string disksJson = "[";
+    for (size_t i = 0; i < drives.size(); i++) {
+        if (i > 0) disksJson += ",";
+        // Parse drive string "C: 42.5GB/120GB"
+        std::string driveStr = drives[i];
+        std::string letter = driveStr.length() >= 2 ? driveStr.substr(0, 2) : "";
+        char diskBuf[256];
+        snprintf(diskBuf, sizeof(diskBuf),
+            "{\"name\":\"%s\",\"driveLetter\":\"%s\"}",
+            Utils::JsonEscape(driveStr).c_str(),
+            Utils::JsonEscape(letter).c_str());
+        disksJson += diskBuf;
+    }
+    disksJson += "]";
+
+    // Build Network JSON
+    std::string localIp = Utils::GetLocalIp();
+    char networkJson[256];
+    snprintf(networkJson, sizeof(networkJson),
+        "[{\"name\":\"Local Network\",\"ipAddress\":\"%s\",\"status\":\"Up\"}]",
+        Utils::JsonEscape(localIp).c_str());
+
+    // Build final JSON
+    char* result = new char[16384];
+    snprintf(result, 16384,
+        "{"
+        "\"cpu\":%s,"
+        "\"gpus\":%s,"
+        "\"memory\":%s,"
+        "\"performance\":%s,"
+        "\"os\":%s,"
+        "\"disks\":%s,"
+        "\"networkAdapters\":%s,"
+        "\"machineName\":\"%s\","
+        "\"isAdmin\":%s,"
+        "\"uacEnabled\":%s"
+        "}",
+        cpuJson,
+        gpusJson.c_str(),
+        memoryJson,
+        perfJson,
+        osJson,
+        disksJson.c_str(),
+        networkJson,
+        Utils::JsonEscape(Utils::GetMachineName()).c_str(),
+        Utils::IsRunningAsAdmin() ? "true" : "false",
+        Utils::IsUacEnabled() ? "true" : "false");
+
+    std::string jsonResult = result;
+    delete[] result;
+    return jsonResult;
 }
 
 bool CaptureScreenshot(const char* outputPath) {

@@ -670,15 +670,24 @@ public class TcpInstallerService : BackgroundService
     /// <summary>
     /// Tries to parse a JSON string as DetailedSystemInfo.
     /// Returns null if parsing fails or JSON doesn't match expected format.
+    /// Supports both legacy flat format and new detailed nested format.
     /// </summary>
     private DetailedSystemInfo? TryParseDetailedSystemInfo(string json)
     {
         try
         {
-            // Try to detect if this is system info JSON by checking for expected fields
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
+            var info = new DetailedSystemInfo();
+
+            // Check for new detailed format (has nested "cpu" object)
+            if (root.TryGetProperty("cpu", out var cpuElement) && cpuElement.ValueKind == JsonValueKind.Object)
+            {
+                return ParseDetailedFormat(root, info);
+            }
+
+            // Legacy flat format
             // The C++ client sends: machineName, username, osVersion, architecture, cpuCount, totalMemory, availableMemory, localIp, isAdmin, uacEnabled, gpu, drives
             if (!root.TryGetProperty("machineName", out _) &&
                 !root.TryGetProperty("osVersion", out _) &&
@@ -686,8 +695,6 @@ public class TcpInstallerService : BackgroundService
             {
                 return null; // Not system info
             }
-
-            var info = new DetailedSystemInfo();
 
             // Parse OS info
             info.Os = new OsInfo
@@ -707,13 +714,13 @@ public class TcpInstallerService : BackgroundService
             };
 
             // Parse Memory info
+            var totalMem = GetJsonLong(root, "totalMemory");
+            var availMem = GetJsonLong(root, "availableMemory");
             info.Memory = new MemoryInfo
             {
-                TotalPhysicalBytes = GetJsonLong(root, "totalMemory"),
-                AvailablePhysicalBytes = GetJsonLong(root, "availableMemory"),
-                MemoryLoadPercent = info.Memory?.TotalPhysicalBytes > 0
-                    ? (int)((1 - (double)GetJsonLong(root, "availableMemory") / GetJsonLong(root, "totalMemory")) * 100)
-                    : 0
+                TotalPhysicalBytes = totalMem,
+                AvailablePhysicalBytes = availMem,
+                MemoryLoadPercent = totalMem > 0 ? (int)((1 - (double)availMem / totalMem) * 100) : 0
             };
 
             // Parse GPU info
@@ -731,7 +738,6 @@ public class TcpInstallerService : BackgroundService
                     var driveStr = drive.GetString();
                     if (!string.IsNullOrEmpty(driveStr))
                     {
-                        // Format: "C: 42.5GB free / 120GB total"
                         var driveLetter = driveStr.Length > 0 ? driveStr.Substring(0, 2) : "";
                         info.Disks.Add(new DiskInfo
                         {
@@ -765,7 +771,7 @@ public class TcpInstallerService : BackgroundService
                 });
             }
 
-            _logger.LogDebug("Successfully parsed system info: OS={Os}, CPU cores={Cores}, Memory={Mem}MB",
+            _logger.LogDebug("Successfully parsed legacy system info: OS={Os}, CPU cores={Cores}, Memory={Mem}MB",
                 info.Os?.Version, info.Cpu?.Cores, info.Memory?.TotalPhysicalBytes / 1024 / 1024);
 
             return info;
@@ -775,6 +781,137 @@ public class TcpInstallerService : BackgroundService
             _logger.LogDebug(ex, "Failed to parse JSON as DetailedSystemInfo");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Parses the new detailed JSON format with nested objects.
+    /// </summary>
+    private DetailedSystemInfo ParseDetailedFormat(JsonElement root, DetailedSystemInfo info)
+    {
+        // Parse CPU info from nested object
+        if (root.TryGetProperty("cpu", out var cpuElement))
+        {
+            info.Cpu = new CpuInfo
+            {
+                Name = GetJsonString(cpuElement, "name"),
+                Manufacturer = GetJsonString(cpuElement, "manufacturer"),
+                Cores = GetJsonInt(cpuElement, "cores"),
+                LogicalProcessors = GetJsonInt(cpuElement, "logicalProcessors"),
+                MaxClockSpeedMhz = GetJsonInt(cpuElement, "maxClockSpeedMhz"),
+                CurrentClockSpeedMhz = GetJsonInt(cpuElement, "currentClockSpeedMhz"),
+                Architecture = GetJsonString(cpuElement, "architecture"),
+                L2CacheKb = GetJsonInt(cpuElement, "l2CacheKb"),
+                L3CacheKb = GetJsonInt(cpuElement, "l3CacheKb")
+            };
+        }
+
+        // Parse GPUs from array
+        if (root.TryGetProperty("gpus", out var gpusElement) && gpusElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var gpuEl in gpusElement.EnumerateArray())
+            {
+                info.Gpus.Add(new GpuInfo
+                {
+                    Name = GetJsonString(gpuEl, "name"),
+                    Manufacturer = GetJsonString(gpuEl, "manufacturer"),
+                    VideoMemoryBytes = GetJsonLong(gpuEl, "videoMemoryBytes"),
+                    DriverVersion = GetJsonString(gpuEl, "driverVersion"),
+                    CurrentRefreshRate = GetJsonInt(gpuEl, "currentRefreshRate"),
+                    VideoProcessor = GetJsonString(gpuEl, "videoProcessor"),
+                    Resolution = GetJsonString(gpuEl, "resolution")
+                });
+            }
+        }
+
+        // Parse Memory info
+        if (root.TryGetProperty("memory", out var memElement))
+        {
+            info.Memory = new MemoryInfo
+            {
+                TotalPhysicalBytes = GetJsonLong(memElement, "totalPhysicalBytes"),
+                AvailablePhysicalBytes = GetJsonLong(memElement, "availablePhysicalBytes"),
+                MemoryLoadPercent = GetJsonInt(memElement, "memoryLoadPercent")
+            };
+        }
+
+        // Parse Performance info
+        if (root.TryGetProperty("performance", out var perfElement))
+        {
+            info.Performance = new PerformanceInfo
+            {
+                CpuUsagePercent = GetJsonDouble(perfElement, "cpuUsagePercent"),
+                AvailableMemoryBytes = GetJsonLong(perfElement, "availableMemoryBytes"),
+                UptimeSeconds = GetJsonLong(perfElement, "uptimeSeconds"),
+                ProcessCount = GetJsonInt(perfElement, "processCount"),
+                ThreadCount = GetJsonInt(perfElement, "threadCount"),
+                HandleCount = GetJsonInt(perfElement, "handleCount")
+            };
+
+            // Parse top processes
+            if (perfElement.TryGetProperty("topProcesses", out var procElement) && procElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var proc in procElement.EnumerateArray())
+                {
+                    info.Performance.TopProcesses.Add(new ProcessInfo
+                    {
+                        Pid = GetJsonInt(proc, "pid"),
+                        Name = GetJsonString(proc, "name"),
+                        CpuPercent = GetJsonDouble(proc, "cpuPercent"),
+                        MemoryBytes = GetJsonLong(proc, "memoryBytes")
+                    });
+                }
+            }
+        }
+
+        // Parse OS info
+        if (root.TryGetProperty("os", out var osElement))
+        {
+            info.Os = new OsInfo
+            {
+                Name = GetJsonString(osElement, "name"),
+                Version = GetJsonString(osElement, "version"),
+                Architecture = GetJsonString(osElement, "architecture"),
+                RegisteredUser = GetJsonString(osElement, "registeredUser")
+            };
+        }
+
+        // Parse Disks
+        if (root.TryGetProperty("disks", out var disksElement) && disksElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var diskEl in disksElement.EnumerateArray())
+            {
+                info.Disks.Add(new DiskInfo
+                {
+                    Name = GetJsonString(diskEl, "name"),
+                    DriveLetter = GetJsonString(diskEl, "driveLetter")
+                });
+            }
+        }
+
+        // Parse Network Adapters
+        if (root.TryGetProperty("networkAdapters", out var netElement) && netElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var netEl in netElement.EnumerateArray())
+            {
+                info.NetworkAdapters.Add(new NetworkAdapterInfo
+                {
+                    Name = GetJsonString(netEl, "name"),
+                    IpAddress = GetJsonString(netEl, "ipAddress"),
+                    Status = GetJsonString(netEl, "status")
+                });
+            }
+        }
+
+        // Parse hardware info (machine name etc)
+        info.Hardware = new SystemHardwareInfo
+        {
+            SystemType = info.Cpu?.Architecture ?? ""
+        };
+
+        _logger.LogDebug("Successfully parsed detailed system info: CPU={Cpu}, GPU count={GpuCount}, Memory={Mem}MB, CPU Usage={CpuPct}%",
+            info.Cpu?.Name, info.Gpus.Count, info.Memory?.TotalPhysicalBytes / 1024 / 1024, info.Performance?.CpuUsagePercent);
+
+        return info;
     }
 
     private static string GetJsonString(JsonElement element, string propertyName)
@@ -792,6 +929,12 @@ public class TcpInstallerService : BackgroundService
     {
         return element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number
             ? prop.GetInt64() : 0;
+    }
+
+    private static double GetJsonDouble(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number
+            ? prop.GetDouble() : 0.0;
     }
 
     #endregion
