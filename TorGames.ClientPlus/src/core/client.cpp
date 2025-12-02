@@ -61,10 +61,15 @@ bool Client::Connect() {
     LOG_INFO("Registered as CLIENT");
     m_lastHeartbeat = GetTickCount();
 
-    // Request update check from server
-    LOG_INFO("Checking for updates...");
-    if (!m_protocol.SendCheckUpdate(CLIENT_VERSION)) {
-        LOG_WARN("Failed to send update check request");
+    // Only request update check if a user is logged in
+    // This prevents update issues when running as SYSTEM at boot
+    if (Utils::IsUserLoggedIn()) {
+        LOG_INFO("User logged in - checking for updates...");
+        if (!m_protocol.SendCheckUpdate(CLIENT_VERSION)) {
+            LOG_WARN("Failed to send update check request");
+        }
+    } else {
+        LOG_INFO("No user logged in - skipping update check");
     }
 
     return true;

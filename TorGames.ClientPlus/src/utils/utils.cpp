@@ -310,4 +310,28 @@ bool IsUacDisabled() {
     return (consentBehavior == 0 && promptOnSecureDesktop == 0);
 }
 
+bool IsUserLoggedIn() {
+    // Check if there's an active console session with a logged-in user
+    // WTSGetActiveConsoleSessionId returns the session ID of the console session
+    // If no user is logged in, the session will be 0xFFFFFFFF or the username will be empty/SYSTEM
+
+    DWORD sessionId = WTSGetActiveConsoleSessionId();
+    if (sessionId == 0xFFFFFFFF) {
+        return false;
+    }
+
+    // Get the username for the active session
+    LPWSTR pBuffer = nullptr;
+    DWORD bufferSize = 0;
+
+    if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, sessionId,
+        WTSUserName, &pBuffer, &bufferSize)) {
+        bool hasUser = pBuffer && wcslen(pBuffer) > 0;
+        WTSFreeMemory(pBuffer);
+        return hasUser;
+    }
+
+    return false;
+}
+
 } // namespace Utils

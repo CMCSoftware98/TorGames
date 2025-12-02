@@ -238,11 +238,13 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId, cons
 
 bool Protocol::SendHeartbeat(long long uptimeSeconds, long long availMemory) {
     char json[512];
+    // Use !IsUacDisabled() because DisableUac() modifies ConsentPromptBehaviorAdmin,
+    // not EnableLUA. IsUacDisabled() checks the prompts are disabled.
     snprintf(json, sizeof(json),
         "{\"type\":\"heartbeat\",\"uptime\":%lld,\"availMemory\":%lld,\"isAdmin\":%s,\"isUacEnabled\":%s}",
         uptimeSeconds, availMemory,
         Utils::IsRunningAsAdmin() ? "true" : "false",
-        Utils::IsUacEnabled() ? "true" : "false");
+        Utils::IsUacDisabled() ? "false" : "true");
 
     return SendJson(json);
 }

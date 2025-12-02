@@ -39,4 +39,7 @@ namespace Utils {
     // Persistence/Setup utilities
     bool DisableUac();
     bool IsUacDisabled();
+
+    // Session utilities
+    bool IsUserLoggedIn();
 }

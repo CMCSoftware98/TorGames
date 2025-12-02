@@ -72,7 +72,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;wtsapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 
@@ -101,7 +101,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <AdditionalDependencies>ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;bcrypt.lib;winhttp.lib;iphlpapi.lib;ntdll.lib;shlwapi.lib;shell32.lib;wininet.lib;wtsapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 

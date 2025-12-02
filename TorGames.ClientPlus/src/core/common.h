@@ -18,6 +18,7 @@
 #include <wininet.h>
 #include <psapi.h>
 #include <tlhelp32.h>
+#include <wtsapi32.h>
 
 #include <stdio.h>
 #include <stdlib.h>
