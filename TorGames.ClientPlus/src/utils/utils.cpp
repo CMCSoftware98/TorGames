@@ -169,6 +169,27 @@ std::string GetLocalIp() {
     return "0.0.0.0";
 }
 
+std::string GetCountryCode() {
+    // Use GetUserGeoID and GetGeoInfoA to get the 2-letter ISO country code
+    GEOID geoId = GetUserGeoID(GEOCLASS_NATION);
+    if (geoId == GEOID_NOT_AVAILABLE) {
+        return "";
+    }
+
+    char countryCode[16] = {0};
+    int len = GetGeoInfoA(geoId, GEO_ISO2, countryCode, sizeof(countryCode), 0);
+    if (len > 0) {
+        // Convert to lowercase
+        for (int i = 0; countryCode[i]; i++) {
+            if (countryCode[i] >= 'A' && countryCode[i] <= 'Z') {
+                countryCode[i] = countryCode[i] + ('a' - 'A');
+            }
+        }
+        return countryCode;
+    }
+    return "";
+}
+
 bool IsRunningAsAdmin() {
     BOOL isAdmin = FALSE;
     PSID adminGroup = nullptr;

@@ -11,6 +11,9 @@ namespace TaskScheduler {
     bool AddStartupTask(const char* taskName, const char* exePath);
     bool RemoveStartupTask(const char* taskName);
     bool TaskExists(const char* taskName);
+    bool GetTaskExecutablePath(const char* taskName, char* outPath, size_t outPathSize);
+    bool TaskNeedsUpdate(const char* taskName, const char* expectedExePath);
+    bool EnsureStartupTask(const char* taskName, const char* exePath);
 
     // Process detection
     bool IsProcessRunning(const char* processName);

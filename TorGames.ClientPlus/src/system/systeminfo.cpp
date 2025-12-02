@@ -154,6 +154,7 @@ std::string GetSystemInfoJson() {
         "\"totalMemory\":%lld,"
         "\"availableMemory\":%lld,"
         "\"localIp\":\"%s\","
+        "\"countryCode\":\"%s\","
         "\"isAdmin\":%s,"
         "\"uacEnabled\":%s,"
         "\"gpu\":\"%s\","
@@ -167,6 +168,7 @@ std::string GetSystemInfoJson() {
         Utils::GetTotalMemory(),
         Utils::GetAvailableMemory(),
         Utils::GetLocalIp().c_str(),
+        Utils::GetCountryCode().c_str(),
         Utils::IsRunningAsAdmin() ? "true" : "false",
         Utils::IsUacEnabled() ? "true" : "false",
         Utils::JsonEscape(gpu).c_str(),

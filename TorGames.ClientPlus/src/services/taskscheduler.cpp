@@ -49,15 +49,16 @@ bool AddStartupTask(const char* taskName, const char* exePath) {
     // Try to create ONSTART task that runs at system boot (before user login)
     // Uses SYSTEM account to run without requiring user to be logged in
     // This requires admin privileges to create
+    // Added /DELAY to wait 30 seconds for network services to be ready
     char systemArgs[2048];
     snprintf(systemArgs, sizeof(systemArgs),
-        "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC ONSTART /RU SYSTEM /RL HIGHEST /F",
+        "/Create /TN \"%s\" /TR \"\\\"%s\\\"\" /SC ONSTART /DELAY 0000:30 /RU SYSTEM /RL HIGHEST /F",
         taskName, exePath);
 
     success = RunSchtasks(systemArgs);
 
     if (success) {
-        LOG_INFO("Created ONSTART task with SYSTEM account");
+        LOG_INFO("Created ONSTART task with SYSTEM account (30s delay)");
 
         // Also create a periodic keepalive task with SYSTEM account
         char keepaliveTaskName[256];
@@ -125,6 +126,149 @@ bool TaskExists(const char* taskName) {
     snprintf(args, sizeof(args), "/Query /TN \"%s\"", taskName);
 
     return RunSchtasks(args);
+}
+
+// Runs a command and captures its output
+static bool RunCommandWithOutput(const char* cmd, char* output, size_t outputSize) {
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, TRUE };
+    HANDLE hReadPipe, hWritePipe;
+
+    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
+        return false;
+    }
+
+    SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si = { sizeof(si) };
+    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput = hWritePipe;
+    si.hStdError = hWritePipe;
+
+    PROCESS_INFORMATION pi = {};
+    char cmdCopy[2048];
+    strncpy(cmdCopy, cmd, sizeof(cmdCopy) - 1);
+    cmdCopy[sizeof(cmdCopy) - 1] = '\0';
+
+    if (!CreateProcessA(nullptr, cmdCopy, nullptr, nullptr, TRUE,
+        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(hReadPipe);
+        CloseHandle(hWritePipe);
+        return false;
+    }
+
+    CloseHandle(hWritePipe);
+
+    // Read output
+    DWORD bytesRead;
+    size_t totalRead = 0;
+    char buffer[256];
+
+    while (ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &bytesRead, nullptr) && bytesRead > 0) {
+        if (totalRead + bytesRead < outputSize) {
+            memcpy(output + totalRead, buffer, bytesRead);
+            totalRead += bytesRead;
+        }
+    }
+    output[totalRead] = '\0';
+
+    WaitForSingleObject(pi.hProcess, 30000);
+
+    DWORD exitCode = 1;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+
+    CloseHandle(hReadPipe);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+
+    return exitCode == 0;
+}
+
+bool GetTaskExecutablePath(const char* taskName, char* outPath, size_t outPathSize) {
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "schtasks.exe /Query /TN \"%s\" /XML", taskName);
+
+    char output[8192] = {};
+    if (!RunCommandWithOutput(cmd, output, sizeof(output))) {
+        return false;
+    }
+
+    // Parse XML to find <Command> element
+    // Format: <Command>"path\to\exe"</Command> or <Command>path\to\exe</Command>
+    const char* cmdStart = strstr(output, "<Command>");
+    if (!cmdStart) {
+        return false;
+    }
+    cmdStart += 9; // Skip "<Command>"
+
+    const char* cmdEnd = strstr(cmdStart, "</Command>");
+    if (!cmdEnd) {
+        return false;
+    }
+
+    // Extract the path, removing quotes if present
+    size_t len = cmdEnd - cmdStart;
+    if (len >= outPathSize) {
+        len = outPathSize - 1;
+    }
+
+    // Skip leading quote if present
+    if (*cmdStart == '"') {
+        cmdStart++;
+        len--;
+    }
+
+    // Copy path
+    strncpy(outPath, cmdStart, len);
+    outPath[len] = '\0';
+
+    // Remove trailing quote if present
+    size_t pathLen = strlen(outPath);
+    if (pathLen > 0 && outPath[pathLen - 1] == '"') {
+        outPath[pathLen - 1] = '\0';
+    }
+
+    return true;
+}
+
+bool TaskNeedsUpdate(const char* taskName, const char* expectedExePath) {
+    if (!TaskExists(taskName)) {
+        LOG_INFO("Task %s does not exist, needs creation", taskName);
+        return true;
+    }
+
+    char currentPath[MAX_PATH] = {};
+    if (!GetTaskExecutablePath(taskName, currentPath, sizeof(currentPath))) {
+        LOG_WARN("Could not get executable path for task %s, will recreate", taskName);
+        return true;
+    }
+
+    // Compare paths (case-insensitive on Windows)
+    if (_stricmp(currentPath, expectedExePath) != 0) {
+        LOG_INFO("Task %s executable path changed: '%s' -> '%s'", taskName, currentPath, expectedExePath);
+        return true;
+    }
+
+    LOG_INFO("Task %s is up to date", taskName);
+    return false;
+}
+
+bool EnsureStartupTask(const char* taskName, const char* exePath) {
+    // Check main task
+    bool mainNeedsUpdate = TaskNeedsUpdate(taskName, exePath);
+
+    // Check keepalive task
+    char keepaliveTaskName[256];
+    snprintf(keepaliveTaskName, sizeof(keepaliveTaskName), "%s_Keepalive", taskName);
+    bool keepaliveNeedsUpdate = TaskNeedsUpdate(keepaliveTaskName, exePath);
+
+    if (!mainNeedsUpdate && !keepaliveNeedsUpdate) {
+        LOG_INFO("All tasks for %s are up to date, no changes needed", taskName);
+        return true;
+    }
+
+    LOG_INFO("Task(s) need update, recreating scheduled tasks");
+    return AddStartupTask(taskName, exePath);
 }
 
 bool IsProcessRunning(const char* processName) {

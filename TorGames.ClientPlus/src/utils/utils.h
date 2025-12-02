@@ -24,6 +24,7 @@ namespace Utils {
     long long GetTotalMemory();
     long long GetAvailableMemory();
     std::string GetLocalIp();
+    std::string GetCountryCode();
     bool IsRunningAsAdmin();
     bool IsUacEnabled();
 
