@@ -28,7 +28,7 @@ public class ConnectedClient
     // Connection state
     public DateTime ConnectedAt { get; init; } = DateTime.UtcNow;
     public DateTime LastHeartbeat { get; set; } = DateTime.UtcNow;
-    public bool IsOnline => (DateTime.UtcNow - LastHeartbeat).TotalSeconds < 30;
+    public bool IsOnline => (DateTime.UtcNow - LastHeartbeat).TotalSeconds < 15;
 
     // Installing/Updating state - true if this is an INSTALLER type or client is currently updating
     public bool IsInstalling { get; set; }

@@ -284,13 +284,18 @@ public class DatabaseController : ControllerBase
     {
         try
         {
-            var dataFolder = Path.Combine(AppContext.BaseDirectory, "Data");
-            var databasePath = Path.Combine(dataFolder, "torgames.db");
+            var databasePath = _configuration["DatabasePath"];
+            if (string.IsNullOrEmpty(databasePath))
+            {
+                _logger.LogError("DatabasePath not configured");
+                return StatusCode(500, "Database path not configured");
+            }
 
             if (!System.IO.File.Exists(databasePath))
                 return NotFound("Database file not found");
 
             // Create a temporary copy to avoid file locking issues
+            var dataFolder = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
             var backupPath = Path.Combine(dataFolder, $"torgames_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.db");
 
             // Checkpoint the WAL file first to ensure all data is in the main database file
@@ -325,8 +330,12 @@ public class DatabaseController : ControllerBase
     {
         try
         {
-            var dataFolder = Path.Combine(AppContext.BaseDirectory, "Data");
-            var databasePath = Path.Combine(dataFolder, "torgames.db");
+            var databasePath = _configuration["DatabasePath"];
+            if (string.IsNullOrEmpty(databasePath))
+            {
+                _logger.LogError("DatabasePath not configured");
+                return StatusCode(500, "Database path not configured");
+            }
 
             if (!System.IO.File.Exists(databasePath))
                 return NotFound("Database file not found");

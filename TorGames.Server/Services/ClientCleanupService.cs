@@ -8,7 +8,7 @@ public class ClientCleanupService : BackgroundService
     private readonly ILogger<ClientCleanupService> _logger;
     private readonly ClientManager _clientManager;
     private readonly TimeSpan _cleanupInterval = TimeSpan.FromSeconds(10);
-    private readonly TimeSpan _clientTimeout = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _clientTimeout = TimeSpan.FromSeconds(15);
 
     public ClientCleanupService(ILogger<ClientCleanupService> logger, ClientManager clientManager)
     {

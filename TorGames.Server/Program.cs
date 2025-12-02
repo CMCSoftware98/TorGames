@@ -46,6 +46,7 @@ else
 }
 Directory.CreateDirectory(dataFolder);
 var databasePath = Path.Combine(dataFolder, "torgames.db");
+builder.Configuration["DatabasePath"] = databasePath;
 builder.Services.AddTorGamesDatabase($"Data Source={databasePath}");
 builder.Services.AddScoped<ClientRepository>();
 builder.Services.AddHostedService<DatabaseSyncService>();
