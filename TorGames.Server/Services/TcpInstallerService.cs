@@ -344,11 +344,12 @@ public class TcpInstallerService : BackgroundService
         try
         {
             var currentVersion = message.CurrentVersion ?? "";
-            var client = _clientManager.GetClient(connection.Client.ConnectionKey);
-            var isTestClient = client?.IsTestMode ?? false;
 
-            _logger.LogInformation("Client {Key} checking for update (current: {Version}, test: {IsTest})",
-                connection.Client.ConnectionKey, currentVersion, isTestClient);
+            // For now, assume non-test client - test mode is stored in database, not in-memory client
+            var isTestClient = false;
+
+            _logger.LogInformation("Client {Key} checking for update (current: {Version})",
+                connection.Client.ConnectionKey, currentVersion);
 
             var updateCheck = _updateService.CheckForUpdate(currentVersion, isTestClient);
 
