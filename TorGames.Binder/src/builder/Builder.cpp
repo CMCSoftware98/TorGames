@@ -1,358 +1,444 @@
-// TorGames.Binder - Builder engine implementation
+// ============================================================================
+// File: src/builder/Builder.cpp (KEY CHANGES)
+// Purpose: Implementation of encryption and compression in build pipeline
+// ============================================================================
+
 #include "Builder.h"
+#include "../crypto/Crypto.h"
+#include "../compression/Compression.h"
+#include "../hash/Hash.h"
 #include "../utils/utils.h"
 
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+
 Builder::Builder() {
+    // Initialize modules
+    Crypto::Initialize();
+    Hash::Initialize();
+
+    // Reset stats
+    memset(&m_stats, 0, sizeof(m_stats));
 }
 
 Builder::~Builder() {
+    // Cleanup modules
+    Crypto::Cleanup();
+    Hash::Cleanup();
+}
+
+bool Builder::GenerateEncryptionKey() {
+    if (m_config.encryptionType == ENCRYPTION_NONE) {
+        return true;
+    }
+
+    // Generate 256-bit key
+    auto keyResult = Crypto::GenerateKey(AES_KEY_SIZE);
+    if (keyResult.error != Crypto::CryptoError::Success) {
+        m_lastError = "Failed to generate encryption key: " + keyResult.errorMessage;
+        return false;
+    }
+    m_encryptionKey = std::move(keyResult.data);
+
+    // Generate obfuscation mask
+    m_obfuscationMask = Crypto::GenerateObfuscationMask(AES_KEY_SIZE);
+    if (m_obfuscationMask.empty()) {
+        m_lastError = "Failed to generate obfuscation mask";
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<uint8_t> Builder::ProcessFile(const std::string& filePath, std::string& outHash) {
+    // Load file
+    std::vector<uint8_t> fileData = Utils::LoadFileToMemory(filePath.c_str());
+    if (fileData.empty()) {
+        m_lastError = "Failed to load file: " + filePath;
+        return {};
+    }
+
+    m_stats.totalOriginalSize += fileData.size();
+
+    // Calculate hash of original data
+    auto hashResult = Hash::SHA256(fileData);
+    if (hashResult.error != Hash::HashError::Success) {
+        m_lastError = "Failed to hash file: " + hashResult.errorMessage;
+        return {};
+    }
+    outHash = Hash::HashToHex(hashResult.hash);
+
+    // Compress if enabled
+    std::vector<uint8_t> processedData;
+    if (m_config.compressionType == COMPRESSION_LZ4) {
+        auto compressResult = Compression::Compress(fileData);
+        if (compressResult.error != Compression::CompressionError::Success) {
+            m_lastError = "Failed to compress file: " + compressResult.errorMessage;
+            return {};
+        }
+        processedData = std::move(compressResult.data);
+        m_stats.totalCompressedSize += processedData.size();
+    } else {
+        processedData = std::move(fileData);
+        m_stats.totalCompressedSize += processedData.size();
+    }
+
+    // Encrypt if enabled
+    if (m_config.encryptionType == ENCRYPTION_AES256) {
+        auto encryptResult = Crypto::Encrypt(processedData, m_encryptionKey);
+        if (encryptResult.error != Crypto::CryptoError::Success) {
+            m_lastError = "Failed to encrypt file: " + encryptResult.errorMessage;
+            return {};
+        }
+        processedData = std::move(encryptResult.data);
+    }
+
+    m_stats.totalEncryptedSize += processedData.size();
+    return processedData;
+}
+
+bool Builder::EmbedKey(const std::string& outputPath) {
+    if (m_config.encryptionType == ENCRYPTION_NONE) {
+        return true;
+    }
+
+    // Obfuscate the key
+    std::vector<uint8_t> obfuscatedKey = Crypto::ObfuscateKey(
+        m_encryptionKey,
+        m_obfuscationMask
+    );
+
+    // Create key storage structure
+    // Format: [32 bytes obfuscated key] + [32 bytes mask]
+    std::vector<uint8_t> keyData;
+    keyData.reserve(AES_KEY_SIZE * 2);
+    keyData.insert(keyData.end(), obfuscatedKey.begin(), obfuscatedKey.end());
+    keyData.insert(keyData.end(), m_obfuscationMask.begin(), m_obfuscationMask.end());
+
+    // Embed as resource
+    HANDLE hUpdate = BeginUpdateResourceA(outputPath.c_str(), FALSE);
+    if (!hUpdate) {
+        m_lastError = "Failed to begin resource update for key";
+        return false;
+    }
+
+    BOOL result = UpdateResourceA(
+        hUpdate,
+        MAKEINTRESOURCEA(RT_BINDER_KEY),
+        MAKEINTRESOURCEA(1),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
+        keyData.data(),
+        static_cast<DWORD>(keyData.size())
+    );
+
+    if (!result) {
+        EndUpdateResourceA(hUpdate, TRUE);
+        m_lastError = "Failed to update key resource";
+        return false;
+    }
+
+    if (!EndUpdateResourceA(hUpdate, FALSE)) {
+        m_lastError = "Failed to finalize key resource update";
+        return false;
+    }
+
+    return true;
+}
+
+bool Builder::Build(const std::string& outputPath) {
+    ReportProgress(0, "Starting build...");
+
+    // Reset stats
+    memset(&m_stats, 0, sizeof(m_stats));
+
+    // Validate config
+    if (m_config.files.empty()) {
+        m_lastError = "No files to bind";
+        return false;
+    }
+
+    // Generate encryption key if needed
+    ReportProgress(5, "Generating encryption key...");
+    if (!GenerateEncryptionKey()) {
+        return false;
+    }
+
+    // Copy stub
+    ReportProgress(10, "Copying stub executable...");
+    if (!CopyStub(outputPath)) {
+        return false;
+    }
+
+    // Embed encryption key
+    ReportProgress(15, "Embedding encryption key...");
+    if (!EmbedKey(outputPath)) {
+        return false;
+    }
+
+    // Process and embed files
+    int fileCount = static_cast<int>(m_config.files.size());
+    for (int i = 0; i < fileCount; ++i) {
+        auto& file = m_config.files[i];
+
+        int progress = 20 + (i * 60 / fileCount);
+        ReportProgress(progress, "Processing: " + file.filename);
+
+        // Process file (hash, compress, encrypt)
+        std::string hash;
+        std::vector<uint8_t> processedData = ProcessFile(file.fullPath, hash);
+        if (processedData.empty()) {
+            return false;
+        }
+
+        // Update file config with hash
+        file.sha256Hash = hash;
+        file.compressedSize = static_cast<DWORD>(processedData.size());
+
+        // Embed processed data
+        if (!EmbedFileData(outputPath, processedData, i + 1)) {
+            return false;
+        }
+
+        m_stats.filesProcessed++;
+    }
+
+    // Embed config (after file hashes are calculated)
+    ReportProgress(85, "Embedding configuration...");
+    if (!EmbedConfig(outputPath)) {
+        return false;
+    }
+
+    // Update manifest if admin required
+    ReportProgress(90, "Updating manifest...");
+    if (!UpdateManifest(outputPath, m_config.requireAdmin)) {
+        return false;
+    }
+
+    // Calculate final stats
+    if (m_stats.totalOriginalSize > 0) {
+        m_stats.compressionRatio =
+            static_cast<double>(m_stats.totalEncryptedSize) /
+            static_cast<double>(m_stats.totalOriginalSize);
+    }
+
+    ReportProgress(100, "Build complete!");
+    return true;
+}
+
+bool Builder::EmbedFileData(
+    const std::string& outputPath,
+    const std::vector<uint8_t>& data,
+    int resourceId
+) {
+    HANDLE hUpdate = BeginUpdateResourceA(outputPath.c_str(), FALSE);
+    if (!hUpdate) {
+        m_lastError = "Failed to begin resource update";
+        return false;
+    }
+
+    BOOL result = UpdateResourceA(
+        hUpdate,
+        MAKEINTRESOURCEA(RT_BINDER_FILE),
+        MAKEINTRESOURCEA(resourceId),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
+        const_cast<uint8_t*>(data.data()),
+        static_cast<DWORD>(data.size())
+    );
+
+    if (!result) {
+        EndUpdateResourceA(hUpdate, TRUE);
+        m_lastError = "Failed to update file resource";
+        return false;
+    }
+
+    if (!EndUpdateResourceA(hUpdate, FALSE)) {
+        m_lastError = "Failed to finalize file resource update";
+        return false;
+    }
+
+    return true;
+}
+
+// Updated EmbedConfig to include new fields
+bool Builder::EmbedConfig(const std::string& outputPath) {
+    // Build JSON config
+    std::ostringstream json;
+    json << "{";
+    json << "\"configVersion\":" << CONFIG_VERSION << ",";
+    json << "\"requireAdmin\":" << (m_config.requireAdmin ? "true" : "false") << ",";
+    json << "\"compressionType\":" << m_config.compressionType << ",";
+    json << "\"encryptionType\":" << m_config.encryptionType << ",";
+    json << "\"files\":[";
+
+    for (size_t i = 0; i < m_config.files.size(); ++i) {
+        const auto& file = m_config.files[i];
+        if (i > 0) json << ",";
+
+        json << "{";
+        json << "\"filename\":\"" << EscapeJson(file.filename) << "\",";
+        json << "\"executionOrder\":" << file.executionOrder << ",";
+        json << "\"executeFile\":" << (file.executeFile ? "true" : "false") << ",";
+        json << "\"waitForExit\":" << (file.waitForExit ? "true" : "false") << ",";
+        json << "\"runHidden\":" << (file.runHidden ? "true" : "false") << ",";
+        json << "\"runAsAdmin\":" << (file.runAsAdmin ? "true" : "false") << ",";
+        json << "\"extractPath\":\"" << EscapeJson(file.extractPath) << "\",";
+        json << "\"commandLineArgs\":\"" << EscapeJson(file.commandLineArgs) << "\",";
+        json << "\"executionDelay\":" << file.executionDelay << ",";
+        json << "\"deleteAfterExecution\":" << (file.deleteAfterExecution ? "true" : "false") << ",";
+        json << "\"fileSize\":" << file.fileSize << ",";
+        json << "\"compressedSize\":" << file.compressedSize << ",";
+        json << "\"sha256Hash\":\"" << file.sha256Hash << "\"";
+        json << "}";
+    }
+
+    json << "]}";
+
+    std::string configStr = json.str();
+
+    // Encrypt config if encryption is enabled
+    std::vector<uint8_t> configData;
+    if (m_config.encryptionType == ENCRYPTION_AES256) {
+        std::vector<uint8_t> plainConfig(configStr.begin(), configStr.end());
+        auto encryptResult = Crypto::Encrypt(plainConfig, m_encryptionKey);
+        if (encryptResult.error != Crypto::CryptoError::Success) {
+            m_lastError = "Failed to encrypt configuration";
+            return false;
+        }
+        configData = std::move(encryptResult.data);
+    } else {
+        configData.assign(configStr.begin(), configStr.end());
+    }
+
+    // Embed config
+    HANDLE hUpdate = BeginUpdateResourceA(outputPath.c_str(), FALSE);
+    if (!hUpdate) {
+        m_lastError = "Failed to begin resource update for config";
+        return false;
+    }
+
+    BOOL result = UpdateResourceA(
+        hUpdate,
+        MAKEINTRESOURCEA(RT_BINDER_CONFIG),
+        MAKEINTRESOURCEA(1),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
+        configData.data(),
+        static_cast<DWORD>(configData.size())
+    );
+
+    if (!result) {
+        EndUpdateResourceA(hUpdate, TRUE);
+        m_lastError = "Failed to update config resource";
+        return false;
+    }
+
+    if (!EndUpdateResourceA(hUpdate, FALSE)) {
+        m_lastError = "Failed to finalize config resource update";
+        return false;
+    }
+
+    return true;
+}
+
+std::string Builder::EscapeJson(const std::string& str) {
+    std::string escaped;
+    escaped.reserve(str.size() * 2);
+
+    for (char c : str) {
+        switch (c) {
+            case '\\': escaped += "\\\\"; break;
+            case '"':  escaped += "\\\""; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default:   escaped += c; break;
+        }
+    }
+
+    return escaped;
 }
 
 void Builder::SetConfig(const BinderConfig& config) {
     m_config = config;
 }
 
-std::string Builder::GetStubPath() const {
-    // Look for stub in same directory as binder executable
-    std::string exeDir = Utils::GetExecutableDirectory();
-    return exeDir + "\\TorGames.Binder.Stub.exe";
+std::string Builder::GetLastError() const {
+    return m_lastError;
 }
 
-bool Builder::CopyStub(const std::string& outputPath, std::string& errorMsg) {
+std::string Builder::GetStubPath() const {
+    return Utils::GetExecutableDirectory() + "\\TorGames.Binder.Stub.exe";
+}
+
+void Builder::ReportProgress(int percent, const std::string& status) {
+    if (m_progressCallback) {
+        m_progressCallback(percent, status);
+    }
+}
+
+bool Builder::CopyStub(const std::string& outputPath) {
     std::string stubPath = GetStubPath();
 
-    if (!Utils::FileExists(stubPath.c_str())) {
-        errorMsg = "Stub executable not found: " + stubPath;
-        return false;
-    }
-
     if (!CopyFileA(stubPath.c_str(), outputPath.c_str(), FALSE)) {
-        errorMsg = "Failed to copy stub to output location";
+        m_lastError = "Failed to copy stub executable from: " + stubPath;
         return false;
     }
 
     return true;
 }
 
-std::string Builder::SerializeConfig() const {
-    // Compact JSON serialization (no extra whitespace for reliable parsing)
-    std::string json = "{";
-    json += "\"configVersion\":" + std::to_string(m_config.configVersion) + ",";
-    json += "\"requireAdmin\":" + std::string(m_config.requireAdmin ? "true" : "false") + ",";
-    json += "\"files\":[";
-
-    for (size_t i = 0; i < m_config.files.size(); i++) {
-        const auto& f = m_config.files[i];
-        json += "{";
-        json += "\"filename\":\"" + f.filename + "\",";
-        json += "\"executionOrder\":" + std::to_string(f.executionOrder) + ",";
-        json += "\"executeFile\":" + std::string(f.executeFile ? "true" : "false") + ",";
-        json += "\"waitForExit\":" + std::string(f.waitForExit ? "true" : "false") + ",";
-        json += "\"runHidden\":" + std::string(f.runHidden ? "true" : "false") + ",";
-        json += "\"runAsAdmin\":" + std::string(f.runAsAdmin ? "true" : "false") + ",";
-
-        // Escape backslashes in paths
-        std::string extractPath = f.extractPath;
-        for (size_t p = 0; p < extractPath.length(); p++) {
-            if (extractPath[p] == '\\') {
-                extractPath.insert(p, "\\");
-                p++;
-            }
-        }
-        json += "\"extractPath\":\"" + extractPath + "\",";
-        json += "\"commandLineArgs\":\"" + f.commandLineArgs + "\",";
-        json += "\"executionDelay\":" + std::to_string(f.executionDelay) + ",";
-        json += "\"deleteAfterExecution\":" + std::string(f.deleteAfterExecution ? "true" : "false") + ",";
-        json += "\"fileSize\":" + std::to_string(f.fileSize);
-        json += "}";
-        if (i < m_config.files.size() - 1) {
-            json += ",";
-        }
+bool Builder::UpdateManifest(const std::string& outputPath, bool requireAdmin) {
+    if (!requireAdmin) {
+        return true;  // Nothing to update if admin not required
     }
 
-    json += "]}";
-
-    return json;
-}
-
-bool Builder::EmbedConfig(const std::string& exePath, std::string& errorMsg) {
-    std::string configJson = SerializeConfig();
-
-    HANDLE hUpdate = BeginUpdateResourceA(exePath.c_str(), FALSE);
+    // Update the manifest to require admin elevation
+    HANDLE hUpdate = BeginUpdateResourceA(outputPath.c_str(), FALSE);
     if (!hUpdate) {
-        errorMsg = "Failed to begin resource update for config. Error: " + std::to_string(GetLastError());
+        m_lastError = "Failed to begin resource update for manifest";
         return false;
     }
 
-    // UpdateResource params: hUpdate, lpType, lpName, wLanguage, lpData, cb
-    // Note: FindResource uses (hModule, lpName, lpType) - different order!
-    BOOL success = UpdateResourceA(
-        hUpdate,
-        MAKEINTRESOURCEA(RT_BINDER_CONFIG),  // lpType = 256
-        MAKEINTRESOURCEA(1),                  // lpName = 1
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-        (LPVOID)configJson.c_str(),
-        (DWORD)configJson.length()
-    );
+    // Admin manifest XML
+    const char* adminManifest =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n"
+        "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\r\n"
+        "  <trustInfo xmlns=\"urn:schemas-microsoft-com:asm.v3\">\r\n"
+        "    <security>\r\n"
+        "      <requestedPrivileges>\r\n"
+        "        <requestedExecutionLevel level=\"requireAdministrator\" uiAccess=\"false\"/>\r\n"
+        "      </requestedPrivileges>\r\n"
+        "    </security>\r\n"
+        "  </trustInfo>\r\n"
+        "</assembly>\r\n";
 
-    if (!success) {
-        DWORD err = GetLastError();
-        EndUpdateResourceA(hUpdate, TRUE); // Discard changes
-        errorMsg = "Failed to update config resource. Error: " + std::to_string(err);
-        return false;
-    }
-
-    if (!EndUpdateResourceA(hUpdate, FALSE)) {
-        errorMsg = "Failed to finalize config resource update. Error: " + std::to_string(GetLastError());
-        return false;
-    }
-
-    return true;
-}
-
-bool Builder::EmbedFile(const std::string& exePath, int resourceId, const std::string& filePath, std::string& errorMsg) {
-    std::vector<BYTE> fileData = Utils::LoadFileToMemory(filePath.c_str());
-    if (fileData.empty()) {
-        errorMsg = "Failed to load file: " + filePath;
-        return false;
-    }
-
-    HANDLE hUpdate = BeginUpdateResourceA(exePath.c_str(), FALSE);
-    if (!hUpdate) {
-        errorMsg = "Failed to begin resource update for file";
-        return false;
-    }
-
-    BOOL success = UpdateResourceA(
-        hUpdate,
-        MAKEINTRESOURCEA(RT_BINDER_FILE),
-        MAKEINTRESOURCEA(resourceId),
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-        fileData.data(),
-        (DWORD)fileData.size()
-    );
-
-    if (!success) {
-        EndUpdateResourceA(hUpdate, TRUE); // Discard changes
-        errorMsg = "Failed to update file resource: " + filePath;
-        return false;
-    }
-
-    if (!EndUpdateResourceA(hUpdate, FALSE)) {
-        errorMsg = "Failed to finalize file resource update";
-        return false;
-    }
-
-    return true;
-}
-
-bool Builder::UpdateIcon(const std::string& exePath, const std::string& iconPath, std::string& errorMsg) {
-    if (iconPath.empty()) {
-        return true; // No icon to update
-    }
-
-    if (!Utils::FileExists(iconPath.c_str())) {
-        errorMsg = "Icon file not found: " + iconPath;
-        return false;
-    }
-
-    // Icon updating is complex - requires parsing ICO format and updating
-    // RT_GROUP_ICON and RT_ICON resources. For simplicity, we'll use a
-    // basic approach that works for single-image ICO files.
-
-    std::vector<BYTE> iconData = Utils::LoadFileToMemory(iconPath.c_str());
-    if (iconData.size() < 22) { // Minimum ICO header size
-        errorMsg = "Invalid icon file";
-        return false;
-    }
-
-    // ICO file format:
-    // ICONDIR (6 bytes) + ICONDIRENTRY[] (16 bytes each)
-    // followed by image data
-
-    WORD reserved = *(WORD*)&iconData[0];
-    WORD type = *(WORD*)&iconData[2];
-    WORD count = *(WORD*)&iconData[4];
-
-    if (reserved != 0 || type != 1) {
-        errorMsg = "Invalid icon file format";
-        return false;
-    }
-
-    HANDLE hUpdate = BeginUpdateResourceA(exePath.c_str(), FALSE);
-    if (!hUpdate) {
-        errorMsg = "Failed to begin resource update for icon";
-        return false;
-    }
-
-    // For each icon in the file
-    BYTE* ptr = &iconData[6];
-    std::vector<BYTE> grpIconDir;
-
-    // Build GRPICONDIR header
-    grpIconDir.push_back(0); grpIconDir.push_back(0); // Reserved
-    grpIconDir.push_back(1); grpIconDir.push_back(0); // Type (icon)
-    grpIconDir.push_back((BYTE)count); grpIconDir.push_back(0); // Count
-
-    for (WORD i = 0; i < count; i++) {
-        BYTE width = ptr[0];
-        BYTE height = ptr[1];
-        BYTE colorCount = ptr[2];
-        BYTE reserved2 = ptr[3];
-        WORD planes = *(WORD*)&ptr[4];
-        WORD bitCount = *(WORD*)&ptr[6];
-        DWORD bytesInRes = *(DWORD*)&ptr[8];
-        DWORD imageOffset = *(DWORD*)&ptr[12];
-
-        // Add RT_ICON resource
-        if (imageOffset + bytesInRes <= iconData.size()) {
-            UpdateResourceA(hUpdate,
-                RT_ICON,
-                MAKEINTRESOURCEA(i + 1),
-                MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-                &iconData[imageOffset],
-                bytesInRes);
-        }
-
-        // Add entry to GRPICONDIR (14 bytes each, with nId instead of offset)
-        grpIconDir.push_back(width);
-        grpIconDir.push_back(height);
-        grpIconDir.push_back(colorCount);
-        grpIconDir.push_back(reserved2);
-        grpIconDir.push_back((BYTE)(planes & 0xFF));
-        grpIconDir.push_back((BYTE)((planes >> 8) & 0xFF));
-        grpIconDir.push_back((BYTE)(bitCount & 0xFF));
-        grpIconDir.push_back((BYTE)((bitCount >> 8) & 0xFF));
-        grpIconDir.push_back((BYTE)(bytesInRes & 0xFF));
-        grpIconDir.push_back((BYTE)((bytesInRes >> 8) & 0xFF));
-        grpIconDir.push_back((BYTE)((bytesInRes >> 16) & 0xFF));
-        grpIconDir.push_back((BYTE)((bytesInRes >> 24) & 0xFF));
-        WORD nId = i + 1;
-        grpIconDir.push_back((BYTE)(nId & 0xFF));
-        grpIconDir.push_back((BYTE)((nId >> 8) & 0xFF));
-
-        ptr += 16;
-    }
-
-    // Update RT_GROUP_ICON resource
-    UpdateResourceA(hUpdate,
-        RT_GROUP_ICON,
-        MAKEINTRESOURCEA(1),
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-        grpIconDir.data(),
-        (DWORD)grpIconDir.size());
-
-    if (!EndUpdateResourceA(hUpdate, FALSE)) {
-        errorMsg = "Failed to finalize icon resource update";
-        return false;
-    }
-
-    return true;
-}
-
-bool Builder::UpdateManifest(const std::string& exePath, bool requireAdmin, std::string& errorMsg) {
-    const char* manifestTemplate = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
-    <security>
-      <requestedPrivileges>
-        <requestedExecutionLevel level="%s" uiAccess="false"/>
-      </requestedPrivileges>
-    </security>
-  </trustInfo>
-  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
-    <application>
-      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
-      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
-      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
-      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
-      <supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}"/>
-    </application>
-  </compatibility>
-</assembly>)";
-
-    char manifest[2048];
-    snprintf(manifest, sizeof(manifest), manifestTemplate,
-             requireAdmin ? "requireAdministrator" : "asInvoker");
-
-    HANDLE hUpdate = BeginUpdateResourceA(exePath.c_str(), FALSE);
-    if (!hUpdate) {
-        errorMsg = "Failed to begin resource update for manifest";
-        return false;
-    }
-
-    BOOL success = UpdateResourceA(
+    BOOL result = UpdateResourceA(
         hUpdate,
         RT_MANIFEST,
         MAKEINTRESOURCEA(1),
         MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-        manifest,
-        (DWORD)strlen(manifest)
+        (LPVOID)adminManifest,
+        (DWORD)strlen(adminManifest)
     );
 
-    if (!success) {
+    if (!result) {
         EndUpdateResourceA(hUpdate, TRUE);
-        errorMsg = "Failed to update manifest resource";
+        m_lastError = "Failed to update manifest resource";
         return false;
     }
 
     if (!EndUpdateResourceA(hUpdate, FALSE)) {
-        errorMsg = "Failed to finalize manifest resource update";
+        m_lastError = "Failed to finalize manifest resource update";
         return false;
     }
 
     return true;
 }
 
-bool Builder::Build(const std::string& outputPath, std::string& errorMsg) {
-    // Validate configuration
-    if (m_config.files.empty()) {
-        errorMsg = "No files to bind";
-        return false;
-    }
+Builder::BuildStats Builder::GetBuildStats() const {
+    return m_stats;
+}
 
-    // Verify all source files exist
-    for (const auto& file : m_config.files) {
-        if (!Utils::FileExists(file.fullPath.c_str())) {
-            errorMsg = "Source file not found: " + file.fullPath;
-            return false;
-        }
-    }
-
-    // Step 1: Copy stub to output
-    if (!CopyStub(outputPath, errorMsg)) {
-        return false;
-    }
-
-    // Step 2: Embed configuration
-    if (!EmbedConfig(outputPath, errorMsg)) {
-        DeleteFileA(outputPath.c_str());
-        return false;
-    }
-
-    // Step 3: Embed each file
-    int resourceId = 1;
-    for (const auto& file : m_config.files) {
-        if (!EmbedFile(outputPath, resourceId, file.fullPath, errorMsg)) {
-            DeleteFileA(outputPath.c_str());
-            return false;
-        }
-        resourceId++;
-    }
-
-    // Step 4: Update icon if specified
-    if (!m_config.customIcon.empty()) {
-        if (!UpdateIcon(outputPath, m_config.customIcon, errorMsg)) {
-            // Non-fatal - just warn
-            MessageBoxA(NULL, errorMsg.c_str(), "Icon Warning", MB_OK | MB_ICONWARNING);
-        }
-    }
-
-    // Step 5: Update manifest for admin requirement
-    if (!UpdateManifest(outputPath, m_config.requireAdmin, errorMsg)) {
-        DeleteFileA(outputPath.c_str());
-        return false;
-    }
-
-    return true;
+void Builder::SetProgressCallback(ProgressCallback callback) {
+    m_progressCallback = callback;
 }

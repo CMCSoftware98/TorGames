@@ -101,17 +101,25 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <AdditionalDependencies>kernel32.lib;user32.lib;shell32.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;shell32.lib;shlwapi.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 
   <ItemGroup>
+    <ClCompile Include="compression\compression.cpp" />
+    <ClCompile Include="crypto\crypto.cpp" />
+    <ClCompile Include="hash\hash.cpp" />
+    <ClCompile Include="lib\lz4.c" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Extractor.cpp" />
     <ClCompile Include="src\Executor.cpp" />
   </ItemGroup>
 
   <ItemGroup>
+    <ClInclude Include="compression\compression.h" />
+    <ClInclude Include="crypto\crypto.h" />
+    <ClInclude Include="hash\hash.h" />
+    <ClInclude Include="lib\lz4.h" />
     <ClInclude Include="src\common.h" />
     <ClInclude Include="src\version.h" />
     <ClInclude Include="src\Extractor.h" />

@@ -149,10 +149,11 @@ bool ExecuteAll(const BinderConfig& config, const std::string& extractionFolder)
         }
 
         // Extract the file
-        if (!Extractor::ExtractFile(resourceId, extractPath.c_str())) {
+        auto result = Extractor::ExtractFile(resourceId, fileConfig, extractionFolder);
+        if (result.error != Extractor::ExtractorError::Success) {
             allSuccess = false;
         } else {
-            extractedFiles.push_back(extractPath);
+            extractedFiles.push_back(result.extractedPath);
         }
         resourceId++;
     }

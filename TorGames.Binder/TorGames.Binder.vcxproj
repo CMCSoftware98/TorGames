@@ -95,7 +95,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;shell32.lib;shlwapi.lib;comctl32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;shell32.lib;shlwapi.lib;comctl32.lib;comdlg32.lib;ole32.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
@@ -103,6 +103,11 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
+    
+    <ClCompile Include="compression\compression.cpp" />
+    <ClCompile Include="crypto\crypto.cpp" />
+    <ClCompile Include="hash\hash.cpp" />
+    <ClCompile Include="lib\lz4.c" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\builder\Builder.cpp" />
     <ClCompile Include="src\ui\MainWindow.cpp" />
@@ -110,6 +115,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ClInclude Include="compression\compression.h" />
+    <ClInclude Include="crypto\crypto.h" />
+    <ClInclude Include="hash\hash.h" />
+    <ClInclude Include="lib\lz4.h" />
     <ClInclude Include="src\core\common.h" />
     <ClInclude Include="src\core\version.h" />
     <ClInclude Include="src\builder\Builder.h" />
@@ -125,6 +134,8 @@
   <ItemGroup>
     <None Include="res\manifest.xml" />
   </ItemGroup>
+
+
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

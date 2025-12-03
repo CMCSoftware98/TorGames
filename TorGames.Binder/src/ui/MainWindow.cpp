@@ -1,6 +1,8 @@
 // TorGames.Binder - Main window implementation
 #include "MainWindow.h"
 #include "../utils/utils.h"
+#include "../../res/resource.h"
+#include <algorithm>
 
 // Dialog resource IDs
 #define IDD_FILE_SETTINGS       2001
@@ -700,14 +702,13 @@ void MainWindow::OnBuild() {
 
     m_builder.SetConfig(m_config);
 
-    std::string errorMsg;
-    if (m_builder.Build(outputPath, errorMsg)) {
+    if (m_builder.Build(outputPath)) {
         MessageBoxA(m_hwnd,
             ("Build successful!\n\nOutput: " + outputPath).c_str(),
             "Build Complete", MB_OK | MB_ICONINFORMATION);
     } else {
         MessageBoxA(m_hwnd,
-            ("Build failed:\n\n" + errorMsg).c_str(),
+            ("Build failed:\n\n" + m_builder.GetLastError()).c_str(),
             "Build Error", MB_OK | MB_ICONERROR);
     }
 }
