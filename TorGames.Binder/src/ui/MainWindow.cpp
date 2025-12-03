@@ -1,5 +1,6 @@
 // TorGames.Binder - Main window implementation
 #include "MainWindow.h"
+#include "../core/common.h"
 #include "../utils/utils.h"
 #include "../../res/resource.h"
 #include <algorithm>
@@ -30,6 +31,9 @@ static thread_local BinderConfig* g_editingConfig = nullptr;
 MainWindow::MainWindow()
     : m_hwnd(NULL), m_listView(NULL), m_statusBar(NULL),
       m_hInstance(NULL), m_imageList(NULL) {
+    // Enable encryption and compression by default
+    m_config.compressionType = COMPRESSION_LZ4;
+    m_config.encryptionType = ENCRYPTION_AES256;
 }
 
 MainWindow::~MainWindow() {
@@ -617,15 +621,29 @@ INT_PTR CALLBACK MainWindow::GlobalSettingsDlgProc(HWND hwnd, UINT msg, WPARAM w
             pConfig = (BinderConfig*)lParam;
             SetWindowTextA(hwnd, "Global Settings");
 
-            SetWindowPos(hwnd, NULL, 0, 0, 400, 180, SWP_NOMOVE | SWP_NOZORDER);
+            SetWindowPos(hwnd, NULL, 0, 0, 400, 250, SWP_NOMOVE | SWP_NOZORDER);
 
             int y = 10;
 
+            // Require Admin checkbox
             HWND hAdmin = CreateWindowExA(0, "BUTTON", "Require Administrator privileges", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                 10, y, 250, 20, hwnd, (HMENU)IDC_CHK_REQUIREADMIN, NULL, NULL);
             SendMessage(hAdmin, BM_SETCHECK, pConfig->requireAdmin ? BST_CHECKED : BST_UNCHECKED, 0);
-            y += 30;
+            y += 28;
 
+            // Encryption checkbox
+            HWND hEncrypt = CreateWindowExA(0, "BUTTON", "Enable Encryption (AES-256-GCM)", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                10, y, 250, 20, hwnd, (HMENU)IDC_ENCRYPT_CHECK, NULL, NULL);
+            SendMessage(hEncrypt, BM_SETCHECK, pConfig->encryptionType == ENCRYPTION_AES256 ? BST_CHECKED : BST_UNCHECKED, 0);
+            y += 28;
+
+            // Compression checkbox
+            HWND hCompress = CreateWindowExA(0, "BUTTON", "Enable Compression (LZ4)", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                10, y, 250, 20, hwnd, (HMENU)IDC_COMPRESS_CHECK, NULL, NULL);
+            SendMessage(hCompress, BM_SETCHECK, pConfig->compressionType == COMPRESSION_LZ4 ? BST_CHECKED : BST_UNCHECKED, 0);
+            y += 35;
+
+            // Custom Icon
             CreateWindowExA(0, "STATIC", "Custom Icon:", WS_CHILD | WS_VISIBLE,
                 10, y + 2, 80, 20, hwnd, NULL, NULL, NULL);
             HWND hIcon = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", pConfig->customIcon.c_str(), WS_CHILD | WS_VISIBLE,
@@ -634,6 +652,7 @@ INT_PTR CALLBACK MainWindow::GlobalSettingsDlgProc(HWND hwnd, UINT msg, WPARAM w
                 330, y, 30, 22, hwnd, (HMENU)IDC_BTN_BROWSE_ICON, NULL, NULL);
             y += 50;
 
+            // OK/Cancel buttons
             CreateWindowExA(0, "BUTTON", "OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
                 200, y, 80, 28, hwnd, (HMENU)IDOK, NULL, NULL);
             CreateWindowExA(0, "BUTTON", "Cancel", WS_CHILD | WS_VISIBLE,
@@ -656,6 +675,14 @@ INT_PTR CALLBACK MainWindow::GlobalSettingsDlgProc(HWND hwnd, UINT msg, WPARAM w
 
                 case IDOK: {
                     pConfig->requireAdmin = (SendDlgItemMessage(hwnd, IDC_CHK_REQUIREADMIN, BM_GETCHECK, 0, 0) == BST_CHECKED);
+
+                    // Encryption setting
+                    pConfig->encryptionType = (SendDlgItemMessage(hwnd, IDC_ENCRYPT_CHECK, BM_GETCHECK, 0, 0) == BST_CHECKED)
+                        ? ENCRYPTION_AES256 : ENCRYPTION_NONE;
+
+                    // Compression setting
+                    pConfig->compressionType = (SendDlgItemMessage(hwnd, IDC_COMPRESS_CHECK, BM_GETCHECK, 0, 0) == BST_CHECKED)
+                        ? COMPRESSION_LZ4 : COMPRESSION_NONE;
 
                     char buf[MAX_PATH];
                     GetDlgItemTextA(hwnd, IDC_EDIT_ICON, buf, sizeof(buf));

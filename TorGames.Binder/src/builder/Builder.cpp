@@ -4,9 +4,9 @@
 // ============================================================================
 
 #include "Builder.h"
-#include "../crypto/Crypto.h"
-#include "../compression/Compression.h"
-#include "../hash/Hash.h"
+#include "../../crypto/crypto.h"
+#include "../../compression/compression.h"
+#include "../../hash/hash.h"
 #include "../utils/utils.h"
 
 #include <fstream>

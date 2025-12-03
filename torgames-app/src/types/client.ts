@@ -18,6 +18,7 @@ export interface ClientDto {
   connectedAt: string
   lastHeartbeat: string
   isOnline: boolean
+  isInstalling: boolean  // True if this is an installer or client is updating
   cpuUsagePercent: number
   availableMemoryBytes: number
   uptimeSeconds: number

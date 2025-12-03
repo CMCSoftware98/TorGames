@@ -51,10 +51,18 @@ public class DatabaseSyncService : BackgroundService
     {
         try
         {
+            var client = e.Client;
+
+            // Skip INSTALLER type clients - they are transient and should not be persisted
+            // Once the installer completes, the installed client will register with its own type
+            if (client.ClientType.Equals("INSTALLER", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("Skipping database persistence for INSTALLER client {ClientId}", client.ClientId);
+                return;
+            }
+
             using var scope = _serviceProvider.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<ClientRepository>();
-
-            var client = e.Client;
 
             // Update or create client record
             await repository.UpdateClientFromConnectionAsync(
@@ -92,6 +100,12 @@ public class DatabaseSyncService : BackgroundService
     {
         try
         {
+            // Skip INSTALLER type clients - they are not persisted
+            if (e.Client.ClientType.Equals("INSTALLER", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             using var scope = _serviceProvider.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<ClientRepository>();
 

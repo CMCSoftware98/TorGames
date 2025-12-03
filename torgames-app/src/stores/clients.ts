@@ -19,11 +19,28 @@ export const useClientsStore = defineStore('clients', () => {
   let refreshInterval: ReturnType<typeof setInterval> | null = null
   const REFRESH_INTERVAL_MS = 30000 // Refresh clients every 30 seconds
 
+  // Helper to check if client is an installer
+  // Uses server-provided isInstalling flag which covers:
+  // - ClientType == "INSTALLER"
+  // - ActivityStatus contains "Installing" or "Updating"
+  const isInstallerClient = (client: ClientDto): boolean => {
+    // Prefer server-provided flag if available
+    if (client.isInstalling !== undefined) return client.isInstalling
+    // Fallback for older server versions
+    if (client.clientType?.toUpperCase() === 'INSTALLER') return true
+    const activity = (client.activityStatus || '').toLowerCase()
+    if (activity.includes('installing') || activity.includes('updating') || activity.includes('downloading')) return true
+    return false
+  }
+
   // Computed
   const clientList = computed(() => Array.from(clients.value.values()))
-  const onlineClients = computed(() => clientList.value.filter(c => c.isOnline))
+  const onlineClients = computed(() => clientList.value.filter(c => c.isOnline && !isInstallerClient(c)))
+  const installingClients = computed(() => clientList.value.filter(c => c.isOnline && isInstallerClient(c)))
+  const offlineClients = computed(() => clientList.value.filter(c => !c.isOnline && !isInstallerClient(c)))
   const clientCount = computed(() => clients.value.size)
   const onlineCount = computed(() => onlineClients.value.length)
+  const installingCount = computed(() => installingClients.value.length)
 
   // Internal functions
   async function doRefresh() {
@@ -224,8 +241,11 @@ export const useClientsStore = defineStore('clients', () => {
     // Computed
     clientList,
     onlineClients,
+    installingClients,
+    offlineClients,
     clientCount,
     onlineCount,
+    installingCount,
     // Actions
     connect,
     disconnect,

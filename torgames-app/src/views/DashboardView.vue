@@ -21,7 +21,7 @@ const settingsStore = useSettingsStore()
 const activeTab = ref('clients')
 
 // Machine list sub-tab state
-const machineListTab = ref<'online' | 'offline'>('online')
+const machineListTab = ref<'online' | 'offline' | 'installing'>('online')
 
 // Context menu state
 const contextMenu = ref(false)
@@ -110,8 +110,11 @@ interface DisplayClient {
   lastHeartbeatText: string
   lastHeartbeatDate: Date
   status: 'online' | 'offline'
+  isInstaller: boolean
   countryCode: string
   activityStatus: string
+  installedAt: string  // Formatted date when client was first seen (installed)
+  installedAtDate: Date | null  // Raw date for sorting
   raw: ClientDto
 }
 
@@ -155,6 +158,40 @@ const formatHeartbeatTime = (lastHeartbeat: Date): string => {
   return `${formatDuration(timeSinceHeartbeat)} ago`
 }
 
+// Format install date as a readable date/time string
+const formatInstallDate = (dateStr: string | undefined): string => {
+  if (!dateStr) return 'Unknown'
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return 'Unknown'
+    // Format as "Dec 3, 2025 15:30"
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  } catch {
+    return 'Unknown'
+  }
+}
+
+// Check if a client is an installer (not yet converted to full client)
+// Uses server-provided isInstalling flag which covers:
+// - ClientType == "INSTALLER"
+// - ActivityStatus contains "Installing" or "Updating"
+const isInstallerClient = (client: ClientDto): boolean => {
+  // Prefer server-provided flag if available
+  if (client.isInstalling !== undefined) return client.isInstalling
+  // Fallback for older server versions
+  if (client.clientType?.toUpperCase() === 'INSTALLER') return true
+  const activity = (client.activityStatus || '').toLowerCase()
+  if (activity.includes('installing') || activity.includes('updating') || activity.includes('downloading')) return true
+  return false
+}
+
 const transformClient = (client: ClientDto): DisplayClient => {
   const connectedDate = new Date(client.connectedAt)
   const lastHeartbeat = new Date(client.lastHeartbeat)
@@ -166,6 +203,10 @@ const transformClient = (client: ClientDto): DisplayClient => {
     : `${formatDuration(timeSinceHeartbeat)} ago`
 
   const clientVer = client.clientVersion || '0.0.0'
+  const isInstaller = isInstallerClient(client)
+
+  // Parse install date (firstSeenAt from database)
+  const installedAtDate = client.firstSeenAt ? new Date(client.firstSeenAt) : null
 
   return {
     id: client.connectionKey,
@@ -184,8 +225,11 @@ const transformClient = (client: ClientDto): DisplayClient => {
     lastHeartbeatText: formatHeartbeatTime(lastHeartbeat),
     lastHeartbeatDate: lastHeartbeat,
     status: client.isOnline ? 'online' : 'offline',
+    isInstaller: isInstaller,
     countryCode: client.countryCode?.toLowerCase() || 'xx',
     activityStatus: client.activityStatus || 'Idling',
+    installedAt: formatInstallDate(client.firstSeenAt),
+    installedAtDate: installedAtDate,
     raw: client
   }
 }
@@ -197,19 +241,34 @@ const displayClients = computed(() => {
     .map(transformClient)
 })
 
-// Online clients only
+// Online clients only (exclude installers - they have their own tab)
 const onlineClients = computed(() => {
-  return displayClients.value.filter(c => c.status === 'online')
+  return displayClients.value.filter(c => c.status === 'online' && !c.isInstaller)
 })
 
-// Offline clients only
+// Offline clients only (exclude installers - installers become clients, so they shouldn't show as offline installers)
+// Also filter by clientType as a safety net for any legacy INSTALLER records in the database
 const offlineClients = computed(() => {
-  return displayClients.value.filter(c => c.status === 'offline')
+  return displayClients.value.filter(c =>
+    c.status === 'offline' &&
+    !c.isInstaller &&
+    c.type?.toUpperCase() !== 'INSTALLER'
+  )
+})
+
+// Installing clients (installers that are online and in the process of installing)
+const installingClients = computed(() => {
+  return displayClients.value.filter(c => c.isInstaller && c.status === 'online')
 })
 
 // Current tab's clients
 const currentTabClients = computed(() => {
-  return machineListTab.value === 'online' ? onlineClients.value : offlineClients.value
+  switch (machineListTab.value) {
+    case 'online': return onlineClients.value
+    case 'offline': return offlineClients.value
+    case 'installing': return installingClients.value
+    default: return []
+  }
 })
 
 // Clean up stale selections and context menu refs when client list changes
@@ -298,6 +357,7 @@ const headers = [
   { title: 'OS', key: 'operatingSystem', sortable: true },
   { title: 'Version', key: 'version', sortable: true, width: '120px' },
   { title: 'Admin', key: 'isAdmin', sortable: true, width: '80px', align: 'center' as const },
+  { title: 'Installed', key: 'installedAt', sortable: true, width: '160px' },
   { title: 'Activity', key: 'activityStatus', sortable: true, width: '150px' },
   { title: 'Last Seen', key: 'lastHeartbeatText', sortable: true, width: '120px' },
 ]
@@ -337,8 +397,8 @@ const showContextMenu = (e: MouseEvent, item: DisplayClient) => {
 
 // Row props for styling different client types
 function getRowProps(data: { item: DisplayClient }): Record<string, any> {
-  if (data.item.type === 'INSTALLER') {
-    return { class: 'new-bot-row' }
+  if (data.item.isInstaller) {
+    return { class: 'installer-row' }
   }
   return {}
 }
@@ -601,12 +661,17 @@ onUnmounted(async () => {
         </v-btn>
       </div>
 
-      <!-- Online/Offline Tabs -->
+      <!-- Online/Offline/Installing Tabs -->
       <v-tabs v-model="machineListTab" class="mb-4" color="primary" density="compact">
         <v-tab value="online" class="text-none">
           <v-icon start size="small" color="success">mdi-circle</v-icon>
           Online
           <v-chip size="x-small" class="ml-2" color="success" variant="flat">{{ onlineClients.length }}</v-chip>
+        </v-tab>
+        <v-tab value="installing" class="text-none">
+          <v-icon start size="small" color="warning">mdi-download</v-icon>
+          Installing
+          <v-chip size="x-small" class="ml-2" color="warning" variant="flat">{{ installingClients.length }}</v-chip>
         </v-tab>
         <v-tab value="offline" class="text-none">
           <v-icon start size="small" color="grey">mdi-circle-outline</v-icon>
@@ -690,6 +755,14 @@ onUnmounted(async () => {
           <div class="d-flex justify-center">
             <v-icon v-if="item.isAdmin" icon="mdi-shield-check" color="primary" size="small"></v-icon>
           </div>
+        </template>
+
+        <!-- Installed Date -->
+        <template #item.installedAt="{ item }">
+          <span class="text-body-2 text-medium-emphasis">
+            <v-icon size="x-small" class="mr-1">mdi-calendar-check</v-icon>
+            {{ item.installedAt }}
+          </span>
         </template>
 
         <!-- Activity Status -->
@@ -951,8 +1024,8 @@ onUnmounted(async () => {
   background: rgba(255, 255, 255, 0.03) !important;
 }
 
-.new-bot-row {
-  background: rgba(59, 130, 246, 0.1);
+.installer-row {
+  background: rgba(251, 191, 36, 0.1);
 }
 
 .country-flag {
