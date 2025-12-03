@@ -4,13 +4,20 @@
 
 namespace Extractor {
 
-// Simple JSON string extraction (reused pattern from other projects)
+// Simple JSON string extraction - handles spaces after colon
 static std::string JsonGetString(const char* json, const char* key) {
     char pattern[128];
-    snprintf(pattern, sizeof(pattern), "\"%s\":\"", key);
+    snprintf(pattern, sizeof(pattern), "\"%s\":", key);
     const char* start = strstr(json, pattern);
     if (!start) return "";
     start += strlen(pattern);
+
+    // Skip whitespace
+    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') start++;
+
+    // Expect opening quote
+    if (*start != '"') return "";
+    start++;
 
     std::string result;
     while (*start && *start != '"') {
@@ -69,9 +76,11 @@ static bool ParseFileConfig(const char* jsonObj, BoundFileConfig& config) {
 
 // Parse the files array from JSON
 static void ParseFilesArray(const char* json, std::vector<BoundFileConfig>& files) {
-    const char* filesStart = strstr(json, "\"files\":[");
+    // Look for "files" key - handle both "files":[ and "files": [ (with space)
+    const char* filesStart = strstr(json, "\"files\"");
     if (!filesStart) return;
 
+    // Find the opening bracket
     filesStart = strchr(filesStart, '[');
     if (!filesStart) return;
     filesStart++;
@@ -108,7 +117,7 @@ static void ParseFilesArray(const char* json, std::vector<BoundFileConfig>& file
 
 bool LoadConfig(BinderConfig& config) {
     // Find the CONFIG resource
-    HRSRC hRes = FindResource(NULL, MAKEINTRESOURCE(1), MAKEINTRESOURCE(RT_BINDER_CONFIG));
+    HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(1), MAKEINTRESOURCEA(RT_BINDER_CONFIG));
     if (!hRes) return false;
 
     HGLOBAL hData = LoadResource(NULL, hRes);

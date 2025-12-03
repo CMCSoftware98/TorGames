@@ -178,32 +178,45 @@ void MainWindow::CreateControls() {
 }
 
 void MainWindow::CreateToolbar() {
-    HWND hToolbar = CreateWindowExA(
-        0, "ToolbarWindow32", NULL,
-        WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT | TBSTYLE_LIST | CCS_TOP,
-        0, 0, 0, 0,
-        m_hwnd, NULL, m_hInstance, NULL
-    );
+    // Create a simple button bar using standard buttons
+    int x = 5;
+    int y = 8;
+    int btnHeight = 28;
+    int spacing = 5;
 
-    SendMessage(hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
-    SendMessage(hToolbar, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_MIXEDBUTTONS);
+    // Add File button
+    CreateWindowExA(0, "BUTTON", "Add File", WS_CHILD | WS_VISIBLE,
+        x, y, 70, btnHeight, m_hwnd, (HMENU)ID_BTN_ADD, m_hInstance, NULL);
+    x += 70 + spacing;
 
-    // Add buttons
-    TBBUTTON buttons[] = {
-        { I_IMAGENONE, ID_BTN_ADD, TBSTATE_ENABLED, BTNS_BUTTON | BTNS_SHOWTEXT, {0}, 0, (INT_PTR)"Add" },
-        { I_IMAGENONE, ID_BTN_REMOVE, TBSTATE_ENABLED, BTNS_BUTTON | BTNS_SHOWTEXT, {0}, 0, (INT_PTR)"Remove" },
-        { 0, 0, 0, BTNS_SEP, {0}, 0, 0 },
-        { I_IMAGENONE, ID_BTN_MOVEUP, TBSTATE_ENABLED, BTNS_BUTTON | BTNS_SHOWTEXT, {0}, 0, (INT_PTR)"Move Up" },
-        { I_IMAGENONE, ID_BTN_MOVEDOWN, TBSTATE_ENABLED, BTNS_BUTTON | BTNS_SHOWTEXT, {0}, 0, (INT_PTR)"Move Down" },
-        { 0, 0, 0, BTNS_SEP, {0}, 0, 0 },
-        { I_IMAGENONE, ID_BTN_SETTINGS, TBSTATE_ENABLED, BTNS_BUTTON | BTNS_SHOWTEXT, {0}, 0, (INT_PTR)"Settings" },
-        { I_IMAGENONE, ID_BTN_GLOBAL, TBSTATE_ENABLED, BTNS_BUTTON | BTNS_SHOWTEXT, {0}, 0, (INT_PTR)"Global" },
-        { 0, 0, 0, BTNS_SEP, {0}, 0, 0 },
-        { I_IMAGENONE, ID_BTN_BUILD, TBSTATE_ENABLED, BTNS_BUTTON | BTNS_SHOWTEXT, {0}, 0, (INT_PTR)"Build" },
-    };
+    // Remove button
+    CreateWindowExA(0, "BUTTON", "Remove", WS_CHILD | WS_VISIBLE,
+        x, y, 70, btnHeight, m_hwnd, (HMENU)ID_BTN_REMOVE, m_hInstance, NULL);
+    x += 70 + spacing + 10;  // Extra spacing
 
-    SendMessage(hToolbar, TB_ADDBUTTONS, _countof(buttons), (LPARAM)buttons);
-    SendMessage(hToolbar, TB_AUTOSIZE, 0, 0);
+    // Move Up button
+    CreateWindowExA(0, "BUTTON", "Move Up", WS_CHILD | WS_VISIBLE,
+        x, y, 70, btnHeight, m_hwnd, (HMENU)ID_BTN_MOVEUP, m_hInstance, NULL);
+    x += 70 + spacing;
+
+    // Move Down button
+    CreateWindowExA(0, "BUTTON", "Move Down", WS_CHILD | WS_VISIBLE,
+        x, y, 80, btnHeight, m_hwnd, (HMENU)ID_BTN_MOVEDOWN, m_hInstance, NULL);
+    x += 80 + spacing + 10;  // Extra spacing
+
+    // File Settings button
+    CreateWindowExA(0, "BUTTON", "File Settings", WS_CHILD | WS_VISIBLE,
+        x, y, 90, btnHeight, m_hwnd, (HMENU)ID_BTN_SETTINGS, m_hInstance, NULL);
+    x += 90 + spacing;
+
+    // Global Settings button
+    CreateWindowExA(0, "BUTTON", "Global Settings", WS_CHILD | WS_VISIBLE,
+        x, y, 100, btnHeight, m_hwnd, (HMENU)ID_BTN_GLOBAL, m_hInstance, NULL);
+    x += 100 + spacing + 10;  // Extra spacing
+
+    // Build button
+    CreateWindowExA(0, "BUTTON", "Build EXE", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
+        x, y, 80, btnHeight, m_hwnd, (HMENU)ID_BTN_BUILD, m_hInstance, NULL);
 }
 
 void MainWindow::CreateListView() {

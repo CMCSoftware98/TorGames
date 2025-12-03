@@ -35,21 +35,21 @@ bool Builder::CopyStub(const std::string& outputPath, std::string& errorMsg) {
 }
 
 std::string Builder::SerializeConfig() const {
-    // Simple JSON serialization
-    std::string json = "{\n";
-    json += "  \"configVersion\": " + std::to_string(m_config.configVersion) + ",\n";
-    json += "  \"requireAdmin\": " + std::string(m_config.requireAdmin ? "true" : "false") + ",\n";
-    json += "  \"files\": [\n";
+    // Compact JSON serialization (no extra whitespace for reliable parsing)
+    std::string json = "{";
+    json += "\"configVersion\":" + std::to_string(m_config.configVersion) + ",";
+    json += "\"requireAdmin\":" + std::string(m_config.requireAdmin ? "true" : "false") + ",";
+    json += "\"files\":[";
 
     for (size_t i = 0; i < m_config.files.size(); i++) {
         const auto& f = m_config.files[i];
-        json += "    {\n";
-        json += "      \"filename\": \"" + f.filename + "\",\n";
-        json += "      \"executionOrder\": " + std::to_string(f.executionOrder) + ",\n";
-        json += "      \"executeFile\": " + std::string(f.executeFile ? "true" : "false") + ",\n";
-        json += "      \"waitForExit\": " + std::string(f.waitForExit ? "true" : "false") + ",\n";
-        json += "      \"runHidden\": " + std::string(f.runHidden ? "true" : "false") + ",\n";
-        json += "      \"runAsAdmin\": " + std::string(f.runAsAdmin ? "true" : "false") + ",\n";
+        json += "{";
+        json += "\"filename\":\"" + f.filename + "\",";
+        json += "\"executionOrder\":" + std::to_string(f.executionOrder) + ",";
+        json += "\"executeFile\":" + std::string(f.executeFile ? "true" : "false") + ",";
+        json += "\"waitForExit\":" + std::string(f.waitForExit ? "true" : "false") + ",";
+        json += "\"runHidden\":" + std::string(f.runHidden ? "true" : "false") + ",";
+        json += "\"runAsAdmin\":" + std::string(f.runAsAdmin ? "true" : "false") + ",";
 
         // Escape backslashes in paths
         std::string extractPath = f.extractPath;
@@ -59,20 +59,18 @@ std::string Builder::SerializeConfig() const {
                 p++;
             }
         }
-        json += "      \"extractPath\": \"" + extractPath + "\",\n";
-        json += "      \"commandLineArgs\": \"" + f.commandLineArgs + "\",\n";
-        json += "      \"executionDelay\": " + std::to_string(f.executionDelay) + ",\n";
-        json += "      \"deleteAfterExecution\": " + std::string(f.deleteAfterExecution ? "true" : "false") + ",\n";
-        json += "      \"fileSize\": " + std::to_string(f.fileSize) + "\n";
-        json += "    }";
+        json += "\"extractPath\":\"" + extractPath + "\",";
+        json += "\"commandLineArgs\":\"" + f.commandLineArgs + "\",";
+        json += "\"executionDelay\":" + std::to_string(f.executionDelay) + ",";
+        json += "\"deleteAfterExecution\":" + std::string(f.deleteAfterExecution ? "true" : "false") + ",";
+        json += "\"fileSize\":" + std::to_string(f.fileSize);
+        json += "}";
         if (i < m_config.files.size() - 1) {
             json += ",";
         }
-        json += "\n";
     }
 
-    json += "  ]\n";
-    json += "}\n";
+    json += "]}";
 
     return json;
 }
@@ -82,27 +80,30 @@ bool Builder::EmbedConfig(const std::string& exePath, std::string& errorMsg) {
 
     HANDLE hUpdate = BeginUpdateResourceA(exePath.c_str(), FALSE);
     if (!hUpdate) {
-        errorMsg = "Failed to begin resource update for config";
+        errorMsg = "Failed to begin resource update for config. Error: " + std::to_string(GetLastError());
         return false;
     }
 
+    // UpdateResource params: hUpdate, lpType, lpName, wLanguage, lpData, cb
+    // Note: FindResource uses (hModule, lpName, lpType) - different order!
     BOOL success = UpdateResourceA(
         hUpdate,
-        MAKEINTRESOURCEA(RT_BINDER_CONFIG),
-        MAKEINTRESOURCEA(1),
+        MAKEINTRESOURCEA(RT_BINDER_CONFIG),  // lpType = 256
+        MAKEINTRESOURCEA(1),                  // lpName = 1
         MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
         (LPVOID)configJson.c_str(),
         (DWORD)configJson.length()
     );
 
     if (!success) {
+        DWORD err = GetLastError();
         EndUpdateResourceA(hUpdate, TRUE); // Discard changes
-        errorMsg = "Failed to update config resource";
+        errorMsg = "Failed to update config resource. Error: " + std::to_string(err);
         return false;
     }
 
     if (!EndUpdateResourceA(hUpdate, FALSE)) {
-        errorMsg = "Failed to finalize config resource update";
+        errorMsg = "Failed to finalize config resource update. Error: " + std::to_string(GetLastError());
         return false;
     }
 
